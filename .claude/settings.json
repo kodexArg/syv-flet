@@ -1,0 +1,55 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 '$CLAUDE_PROJECT_DIR'/.claude/hooks/format-file.py",
+            "description": "Auto-format Python files with Black and Ruff"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 '$CLAUDE_PROJECT_DIR'/.claude/hooks/protect-files.py",
+            "description": "Protect critical files from modification"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 '$CLAUDE_PROJECT_DIR'/.claude/hooks/validate-command.py",
+            "description": "Validate bash commands for best practices"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "startup",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cat '$CLAUDE_PROJECT_DIR'/.claude/README.md",
+            "description": "Load SyV-Flet documentation index on startup"
+          }
+        ]
+      }
+    ]
+  },
+  "model": "claude-haiku-4-5-20251001",
+  "options": {
+    "auto_approve_read_tools": true,
+    "context_limit": "adaptive"
+  }
+}
