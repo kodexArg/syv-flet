@@ -1,0 +1,13 @@
+version: '3.8'
+
+services:
+  syv-flet:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      DEBUG: "True"
+    volumes:
+      - ./logs:/app/logs
+    stdin_open: true
+    tty: true

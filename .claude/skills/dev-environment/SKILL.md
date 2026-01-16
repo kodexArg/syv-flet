@@ -195,11 +195,409 @@ Add to `.env` or shell rc file for persistence.
 | `uv run python -m syv_flet` | Run app |
 | `uv lock --update-all` | Update dependencies |
 
-See `.claude/docs/02-development-guide.md` for comprehensive commands.
+## Advanced Development Topics
+
+### 1. Development Workflow Deep Dive
+
+#### Git Workflow (Recommended)
+
+```bash
+# Feature branch
+git checkout -b feature/hex-grid-rendering
+
+# Frequent commits
+git add src/syv-flet/ui/components/hex_grid.py
+git commit -m "feat: implement static hexagon canvas"
+
+# Push when ready for review
+git push origin feature/hex-grid-rendering
+
+# Merge to main after tests + review
+```
+
+#### IDE Configuration (Neovim + Mason LSPs)
+
+**Neovim Init (init.lua):**
+
+```lua
+-- Treesitter for Python
+local treesitter = require("nvim-treesitter.configs")
+treesitter.setup {
+  ensure_installed = { "python", "toml" },
+  highlight = { enable = true },
+}
+
+-- LSP Python (Pyright via Mason)
+require("mason").setup()
+require("mason-lspconfig").setup {
+  ensure_installed = { "pyright" },
+}
+
+-- Formatter (Black)
+require("conform").setup {
+  formatters_by_ft = {
+    python = { "black", "isort" },
+  },
+}
+```
+
+**Keybindings:**
+
+```lua
+local opts = { noremap = true, silent = true }
+
+-- Format on save
+vim.api.nvim_create_autocmd("BufWritePre", {
+  pattern = "*.py",
+  callback = function() vim.lsp.buf.format() end,
+})
+
+-- Jump to definition
+vim.keymap.set("n", "gd", vim.lsp.buf.definition, opts)
+
+-- Find references
+vim.keymap.set("n", "gr", vim.lsp.buf.references, opts)
+```
+
+### 2. Environment Variables
+
+Create `.env` (don't commit):
+
+```bash
+# .env
+FLET_DEBUG=0
+HEXSIM_LOG_LEVEL=INFO
+HEXSIM_BOARD_RADIUS=20
+HEXSIM_FPS_TARGET=60
+```
+
+Load in main.py:
+
+```python
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+DEBUG = os.getenv("FLET_DEBUG", "0") == "1"
+LOG_LEVEL = os.getenv("HEXSIM_LOG_LEVEL", "INFO")
+BOARD_RADIUS = int(os.getenv("HEXSIM_BOARD_RADIUS", "20"))
+FPS_TARGET = int(os.getenv("HEXSIM_FPS_TARGET", "60"))
+```
+
+### 3. Common Troubleshooting
+
+#### Issue: `ModuleNotFoundError: No module named 'syv-flet'`
+
+**Solution:**
+```bash
+# Ensure you're in project root
+cd /home/kodex/Dev/syv-flet
+
+# Reinstall with sync
+uv sync
+
+# Run correctly
+uv run python -m syv_flet.main
+```
+
+#### Issue: Flet doesn't render on X11/Wayland
+
+**Solution:**
+```bash
+# Check session
+echo $XDG_SESSION_TYPE  # "x11" or "wayland"
+
+# For Wayland (NVIDIA)
+FLET_DISPLAY_WAYLAND=0 uv run python -m syv_flet.main
+```
+
+#### Issue: Tests can't find modules
+
+**Solution:**
+```bash
+# Check PYTHONPATH
+export PYTHONPATH="${PYTHONPATH}:$(pwd)/src"
+
+uv run pytest tests/
+```
+
+#### Issue: Hot reload not working
+
+**Solution:**
+- Verify you're modifying files in `src/syv_flet/ui/`
+- Don't touch `pyproject.toml` (restart app)
+- In terminal: press `Ctrl+R` after changes
+
+### 4. CI/CD Preparation (GitHub Actions)
+
+Create `.github/workflows/test.yml`:
+
+```yaml
+name: Tests
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.12"]
+
+    steps:
+    - uses: actions/checkout@v3
+    - name: Install uv
+      run: pip install uv
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+    - name: Sync dependencies
+      run: uv sync --all-extras
+    - name: Lint
+      run: uv run ruff check src/ tests/
+    - name: Format check
+      run: uv run black --check src/ tests/
+    - name: Tests
+      run: uv run pytest tests/ --cov=src/syv_flet
+```
+
+### 5. VS Code Setup
+
+Create `.vscode/settings.json`:
+```json
+{
+  "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
+  "python.linting.enabled": true,
+  "python.linting.ruffEnabled": true,
+  "python.formatting.provider": "black",
+  "python.formatting.blackArgs": ["--line-length=100"],
+  "[python]": {
+    "editor.formatOnSave": true,
+    "editor.codeActionsOnSave": {
+      "source.fixAll.ruff": true
+    }
+  }
+}
+```
+
+Create `.vscode/launch.json`:
+
+```json
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "SyV-Flet (Flet)",
+      "type": "python",
+      "request": "launch",
+      "program": "${workspaceFolder}/src/syv_flet/main.py",
+      "console": "integratedTerminal",
+      "justMyCode": true,
+      "env": {
+        "FLET_DEBUG": "1"
+      }
+    },
+    {
+      "name": "Unit Tests",
+      "type": "python",
+      "request": "launch",
+      "module": "pytest",
+      "args": ["tests/", "-v"],
+      "console": "integratedTerminal"
+    }
+  ]
+}
+```
+
+---
+
+## Command Reference Cheat Sheet
+
+```bash
+# Development
+uv run python -m syv_flet.main              # Run app
+uv run pytest                              # Run tests
+uv run black src/ tests/                   # Format
+uv run ruff check --fix src/               # Lint + fix
+
+# Adding packages
+uv add flet-core                           # Add dependency
+uv add --dev pytest-xdist                  # Add dev dependency
+
+# Sync
+uv sync                                    # Install from lock
+uv sync --upgrade                          # Upgrade all
+
+# Clean
+rm -rf .venv uv.lock                       # Hard reset
+uv sync                                    # Reinstall
+
+# Debugging
+FLET_DEBUG=1 uv run python -m syv_flet.main # Debug mode
+uv run pytest -xvs tests/test_board.py    # Verbose + stop on first failure
+
+# Code Quality (Complete Pre-Commit Flow)
+uv run black src/ tests/
+uv run ruff check --fix src/ tests/
+uv run mypy src/
+uv run pytest tests/ --cov=src/syv_flet --cov-report=term-missing
+```
+
+---
+
+## Minimal File Structure to Start
+
+### Entry Point
+
+```bash
+# src/syv_flet/__init__.py (empty)
+touch src/syv_flet/__init__.py
+
+# src/syv_flet/main.py
+cat > src/syv_flet/main.py << 'EOF'
+import flet as ft
+
+def main(page: ft.Page):
+    page.title = "SyV-Flet"
+    page.window_width = 1280
+    page.window_height = 720
+
+    title = ft.Text("SyV-Flet", size=40, weight="bold")
+    subtitle = ft.Text("Hexagonal Strategy Game", size=16)
+
+    page.add(
+        ft.Column([title, subtitle], horizontal_alignment="center")
+    )
+
+if __name__ == "__main__":
+    ft.run(main)
+EOF
+
+chmod +x src/syv_flet/main.py
+```
+
+### Minimal Engine Module
+
+```bash
+cat > src/syv_flet/engine/__init__.py << 'EOF'
+"""Game engine module - agnostic to Flet."""
+EOF
+
+cat > src/syv_flet/engine/board.py << 'EOF'
+from typing import List, Tuple
+
+class Board:
+    """Hexagonal board using axial coordinates (q, r)."""
+
+    def __init__(self, radius: int = 20):
+        self.radius = radius
+
+    def is_valid(self, q: int, r: int) -> bool:
+        """Check if (q, r) is within board bounds."""
+        s = -q - r
+        return max(abs(q), abs(r), abs(s)) <= self.radius
+
+    def neighbors(self, q: int, r: int) -> List[Tuple[int, int]]:
+        """Return 6 adjacent hexagons (if valid)."""
+        directions = [(1, 0), (1, -1), (0, -1), (-1, 0), (-1, 1), (0, 1)]
+        return [
+            (q + dq, r + dr) for dq, dr in directions
+            if self.is_valid(q + dq, r + dr)
+        ]
+
+    def distance(self, a: Tuple[int, int], b: Tuple[int, int]) -> int:
+        """Manhattan distance in hexagonal grid."""
+        aq, ar = a
+        bq, br = b
+        as_ = -aq - ar
+        bs_ = -bq - br
+        return (abs(aq - bq) + abs(ar - br) + abs(as_ - bs_)) // 2
+EOF
+```
+
+### Minimal Test
+
+```bash
+cat > tests/test_board.py << 'EOF'
+from syv_flet.engine.board import Board
+
+def test_board_valid():
+    board = Board(radius=5)
+    assert board.is_valid(0, 0)
+    assert board.is_valid(3, 2)
+    assert not board.is_valid(10, 10)
+
+def test_distance():
+    board = Board()
+    assert board.distance((0, 0), (1, 0)) == 1
+    assert board.distance((0, 0), (2, 0)) == 2
+
+if __name__ == "__main__":
+    test_board_valid()
+    test_distance()
+    print("✓ All tests passed")
+EOF
+```
+
+### Run Everything
+
+```bash
+# Format
+uv run black src/ tests/
+
+# Lint
+uv run ruff check src/
+
+# Tests
+uv run pytest tests/ -v
+
+# Application
+uv run python -m syv_flet.main
+```
+
+---
+
+## Quick Start (Copy-Paste)
+
+```bash
+# Navigate to project
+cd /home/kodex/Dev/syv-flet
+
+# Setup Python environment
+python3 --version        # >= 3.12
+uv --version             # >= 0.1.0
+
+# Create folder structure
+mkdir -p src/syv_flet/{engine,ui/{screens,components,controllers,models,styles},utils}
+mkdir -p tests
+mkdir -p assets/{images,fonts}
+
+# Install dependencies using uv (never pip!)
+uv sync
+
+# Verify installation
+uv run python -c "import flet; print(f'Flet {flet.__version__}')"
+
+# Run tests to verify setup
+uv run pytest
+
+# Format code
+uv run black src/ tests/
+
+# Lint code
+uv run ruff check src/
+
+# Run application
+uv run python -m syv_flet.main
+```
+
+---
 
 ## Next Steps
 
-- Read `01-flet-architecture.md` for architecture overview
-- Read `02-development-guide.md` for complete workflow guide
-- Read `03-code-standards.md` for mandatory standards
+- See `PRD.md` for complete product specification
+- See `code-standards` skill for mandatory code standards
+- See `hex-grid-math` skill for hexagonal coordinate mathematics
 - Explore `src/syv_flet/` directory structure

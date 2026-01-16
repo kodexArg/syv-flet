@@ -1,79 +1,440 @@
 ---
 name: hex-grid-math
-description: Reference for hexagonal grid coordinate systems and mathematical operations. Use when implementing pathfinding, grid algorithms, coordinate conversions, distance calculations, or adjacency checks.
-allowed-tools: Read, Grep
+description: Complete reference for hexagonal grid coordinate systems and mathematical operations. Includes mathematical foundations, derivations, and tested algorithms.
+allowed-tools: Read
 ---
 
-# Hexagonal Grid Coordinate Reference
+# Hexagonal Grid Mathematics
 
-When working with hex grid coordinates in SyV-Flet, use **cubic coordinate system** (q, r, s where q + r + s = 0).
+**Author:** SyV-Flet Team
+**Date:** January 16, 2026
+**Level:** Technical (for game engine implementers)
 
-## Quick Reference
+---
 
-### Cubic Coordinates
-- **Format:** (q, r, s) where q + r + s = 0
-- **Advantage:** All hex operations are linear transformations
-- **In SyV-Flet:** Store as (q, r) pairs; compute s = -q - r when needed
+## 1. Overview
 
-### Common Operations
+The SyV-Flet board uses a **normalized cubic coordinate system** to represent hexagonal grids. This model provides simple and exact calculations for adjacency, distance, and rotation—critical operations in the game loop.
 
-| Operation | Formula | Example |
-|-----------|---------|---------|
-| Distance | `max(\|q₁-q₂\|, \|r₁-r₂\|, \|s₁-s₂\|)` | Distance between two hexes |
-| Adjacent | 6 neighbors around any hex | Pathfinding, visibility |
-| Line Drawing | Bresenham-like algorithm | Movement paths, attacks |
-| Ring | Hexes at distance N | Area effects |
+Although we internally use axial coordinates `(q, r)` for memory optimization, the underlying mathematics use cubic space `(q, r, s)` where **q + r + s = 0** always holds.
 
-### Pixel ↔ Coordinate Conversion
-- **Offset-to-pixel:** `x = hex_size * (3/2 * q)`, `y = hex_size * (√3/2 * q + √3 * r)`
-- **Pixel-to-offset:** Inverse transformation via matrix inversion
-- **Rounding:** Use axial rounding (round to nearest axial coordinate)
+---
 
-## Before Implementing
+## 2. Mathematical Foundations
 
-**ALWAYS read the complete mathematical guide:**
+### 2.1. Cubic Space `(q, r, s)`
+
+In a hexagonal grid, each hexagon can be represented as a point in 3D space where the three axes are linearly coupled:
 
 ```
-.claude/docs/hexagonal-grid-coordinates.md
+Invariant: q + r + s = 0
 ```
 
-This document contains:
-- Mathematical foundations and proofs
-- Pixel ↔ coordinate conversions (exact code)
-- Pathfinding algorithms (BFS, Dijkstra)
-- Flood fill and line drawing
-- SyV-Flet-specific implementations and optimizations
+This implies that `s = -q - r`, so we really only need two independent coordinates to uniquely specify a point.
 
-## Common Implementations
+**Geometric Interpretation:**
+- Axis **q** (red): points right (East)
+- Axis **r** (green): points down-left (South-West)
+- Axis **s** (blue): points up-left (North-West)
 
-### Distance
-```python
-def hex_distance(a: tuple, b: tuple) -> int:
-    q1, r1 = a
-    q2, r2 = b
-    s1, s2 = -q1 - r1, -q2 - r2
-    return (abs(q1 - q2) + abs(r1 - r2) + abs(s1 - s2)) // 2
+The three axes are separated by 120° from each other and converge at the origin `(0, 0, 0)`.
+
+### 2.2. Projection to Axial Coordinates `(q, r)`
+
+To reduce memory and complexity, we store only two coordinates:
+
+```
+Grid point: (q, r)
+Where implicitly: s = -q - r
 ```
 
-### Neighbors
+**All operations are calculated using cubic logic, projecting the result back to axial if necessary.**
+
+---
+
+## 3. Fundamental Operations
+
+### 3.1. Adjacency (Immediate Neighbors)
+
+The 6 neighbors of hexagon `(q, r)` are obtained by adding constant direction vectors:
+
 ```python
 DIRECTIONS = [
-    (1, 0), (1, -1), (0, -1),
-    (-1, 0), (-1, 1), (0, 1)
+    (1, 0),    # East
+    (1, -1),   # South-East
+    (0, -1),   # South-West
+    (-1, 0),   # West
+    (-1, 1),   # North-West
+    (0, 1),    # North-East
 ]
 
-def get_neighbors(q: int, r: int) -> list[tuple]:
+def neighbors(q, r):
+    """Return list of 6 adjacent hexagons."""
     return [(q + dq, r + dr) for dq, dr in DIRECTIONS]
 ```
 
-### Pixel to Hex (2x2 Matrix Inversion)
-```python
-import math
-
-def pixel_to_hex(x: float, y: float, size: float) -> tuple:
-    q = (2/3 * x) / size
-    r = (-1/3 * x + math.sqrt(3)/3 * y) / size
-    return round_hex(q, r)
+**Cubic Justification:** In cubic coordinates, direction vectors are:
+```
+(+1, 0, -1), (+1, -1, 0), (0, -1, +1),
+(-1, 0, +1), (-1, +1, 0), (0, +1, -1)
 ```
 
-Refer to `hexagonal-grid-coordinates.md` for complete, tested implementations.
+Projected to axial: only `(q, r)` is used; `s` is recalculated as needed.
+
+### 3.2. Distance (Hexagonal Manhattan)
+
+The distance between two hexagons is the minimum number of steps to go from one to the other:
+
+```python
+def distance(a, b):
+    """
+    Calculate Manhattan distance in hexagonal grid.
+
+    a, b: tuples (q, r)
+    Returns: integer >= 0
+    """
+    aq, ar = a
+    bq, br = b
+
+    # Convert to cubic implicitly
+    as_ = -aq - ar
+    bs_ = -bq - br
+
+    # Manhattan distance in 3D, divided by 2 (because we sum opposite differences)
+    return (abs(aq - bq) + abs(ar - br) + abs(as_ - bs_)) // 2
+```
+
+**Examples:**
+- `distance((0,0), (1,0))` = 1 (neighbors)
+- `distance((0,0), (2,0))` = 2 (two steps)
+- `distance((0,0), (1,-1))` = 1 (adjacent diagonal)
+
+---
+
+## 4. Pixel-Space Geometry
+
+To render the grid and convert mouse clicks to hexagonal coordinates, we need to map between pixels and logical coordinates.
+
+### 4.1. Orientation Model
+
+SyV-Flet uses **flat-top hexagons** (flat-top orientation):
+
+```
+      +----+
+     /      \
+    /        \
+   |          |
+    \        /
+     +----+
+```
+
+(Alternative: pointy-top orientation requires different formulas.)
+
+### 4.2. Pixel → Logical Coordinates Conversion
+
+Given:
+- Hexagon size: `size` (distance from center to vertex, typically 30-50 pixels)
+- Hexagon center `(0, 0)` in pixels: `(center_x, center_y)`
+
+**Formula (flat-top):**
+
+```python
+def pixel_to_hex(px, py, size, center_x, center_y):
+    """
+    Convert pixel coordinates to (q, r).
+
+    Assumes flat-top hexagons.
+    """
+    # Offset relative to center
+    x = px - center_x
+    y = py - center_y
+
+    # Change of basis: from pixels to cubic
+    # (These formulas assume specific size and spacing)
+    q = (x * 2/3) / size
+    r = (-x / 3 + y * 0.5 / size)
+    s = -q - r
+
+    # Cubic rounding to nearest hexagon
+    q, r, s = round_hex(q, r, s)
+
+    return (int(q), int(r))
+
+def round_hex(q, r, s):
+    """
+    Round fractional cubic coordinates to nearest hexagon.
+
+    Correctly handles the q + r + s = 0 invariant.
+    """
+    rq = round(q)
+    rr = round(r)
+    rs = round(s)
+
+    q_diff = abs(rq - q)
+    r_diff = abs(rr - r)
+    s_diff = abs(rs - s)
+
+    if q_diff > r_diff and q_diff > s_diff:
+        rq = -rr - rs
+    elif r_diff > s_diff:
+        rr = -rq - rs
+    else:
+        rs = -rq - rr
+
+    return (rq, rr, rs)
+```
+
+### 4.3. Logical Coordinates → Pixels Conversion
+
+Inverse of the above:
+
+```python
+def hex_to_pixel(q, r, size, center_x, center_y):
+    """
+    Convert (q, r) to pixels.
+    """
+    x = size * (3/2 * q)
+    y = size * (0.5 * q + r)
+
+    return (center_x + x, center_y + y)
+```
+
+---
+
+## 5. Board Topology (Radius R=20)
+
+### 5.1. Valid Hexagons
+
+A hexagonal board of radius R contains all points `(q, r, s)` where:
+
+```
+max(|q|, |r|, |s|) <= R
+```
+
+In axial coordinates:
+
+```python
+def is_valid(q, r, R):
+    """Check if (q, r) is within board of radius R."""
+    s = -q - r
+    return max(abs(q), abs(r), abs(s)) <= R
+```
+
+### 5.2. Cardinality
+
+The total number of hexagons in a board of radius R is:
+
+```
+Total = 3*R*(R+1) + 1
+
+For R=20: Total = 3*20*21 + 1 = 1,261
+```
+
+**Derivation:** A hexagonal board of radius R is a concentric hexagon. Its perimeter grows linearly with R, and its area grows with R². The formula results from summing the area of all "rings" from center to radius R.
+
+### 5.3. Iteration over Board
+
+```python
+def all_hexagons(R):
+    """Generate all valid coordinates on the board."""
+    for q in range(-R, R+1):
+        for r in range(max(-R, -q-R), min(R, -q+R) + 1):
+            yield (q, r)
+```
+
+---
+
+## 6. Common Algorithms
+
+### 6.1. Straight Line Between Two Hexagons
+
+To draw a line from `(q1, r1)` to `(q2, r2)`:
+
+```python
+def line_hex(start, end):
+    """
+    Return list of hexagons in straight line between start and end.
+
+    Uses cubic interpolation with rounding.
+    """
+    q1, r1 = start
+    q2, r2 = end
+
+    dist = distance(start, end)
+    result = []
+
+    for i in range(dist + 1):
+        t = i / max(1, dist)  # Avoid division by zero
+
+        # Linear interpolation in cubic
+        q = q1 + (q2 - q1) * t
+        r = r1 + (r2 - r1) * t
+        s = -q - r
+
+        # Round to nearest hexagon
+        q, r, s = round_hex(q, r, s)
+
+        result.append((int(q), int(r)))
+
+    return result
+```
+
+### 6.2. Pathfinding
+
+To find shortest path between two points, use BFS:
+
+```python
+from collections import deque
+
+def bfs_hex(start, end, is_walkable):
+    """
+    BFS on hexagonal grid.
+
+    is_walkable: function(q, r) -> bool
+    """
+    queue = deque([(start, [start])])
+    visited = {start}
+
+    while queue:
+        (q, r), path = queue.popleft()
+
+        if (q, r) == end:
+            return path
+
+        for nq, nr in neighbors(q, r):
+            if (nq, nr) not in visited and is_walkable(nq, nr):
+                visited.add((nq, nr))
+                queue.append(((nq, nr), path + [(nq, nr)]))
+
+    return None  # No path exists
+```
+
+### 6.3. Flood Fill (Connectivity)
+
+To verify no unreachable islands exist:
+
+```python
+def flood_fill(start, is_valid, R):
+    """
+    Expand from start until reaching all connected hexagons.
+
+    Returns set of reachable coordinates.
+    """
+    visited = set()
+    queue = deque([start])
+
+    while queue:
+        hex_current = queue.popleft()
+
+        if hex_current in visited:
+            continue
+
+        visited.add(hex_current)
+
+        for neighbor in neighbors(*hex_current):
+            if neighbor not in visited and is_valid(*neighbor, R):
+                queue.append(neighbor)
+
+    return visited
+```
+
+---
+
+## 7. Use Cases in SyV-Flet
+
+### 7.1. Movement Phase
+
+When processing a **MOVE** order (distance 3):
+
+```
+1. Calculate distance from current → target hexagon
+2. If distance > 3: reject order (invalid)
+3. Generate shortest path (BFS)
+4. Check collisions at each step
+5. Update unit's final position
+```
+
+### 7.2. Five-Hexagon Rule
+
+To eliminate isolated units:
+
+```
+For each unit U:
+  min_dist = min(distance(U, officer) for officer in List_Officers)
+  if min_dist > 5:
+    Delete U
+```
+
+### 7.3. Neighbor Detection for Combat
+
+When resolving combat at hexagon `(q, r)`:
+
+```
+Combatants = [all units at (q, r) or in neighbors(q, r)]
+Apply combat resolution
+```
+
+---
+
+## 8. References and Extensions
+
+### Recommended Reading
+
+- **Red Blob Games "Hexagonal Grids"**: Industry standard reference. Contains detailed formulas and visuals.
+  - https://www.redblobgames.com/grids/hexagons/
+
+- **Mathematical Games - Hexagonal Grid Representations** (Donald Knuth): Rigorous analysis of different representations.
+
+### Unimplemented Variants
+
+- **Pointy-Top Hexagons:** Alternative orientation (point upward). Requires different pixel↔hex formulas.
+- **Offset Coordinates:** Alternative to cubic/axial. Less mathematically elegant.
+- **Hexagon Rotation:** Not used in SyV-Flet but possible with cubic transformations.
+
+---
+
+## 9. Implementation Notes (Flet)
+
+### Efficient Rendering
+
+```python
+# Precalculate pixel positions for each valid hexagon
+pixel_cache = {}
+for q, r in all_hexagons(R):
+    pixel_cache[(q, r)] = hex_to_pixel(q, r, size, center_x, center_y)
+
+# In render loop: only consult cache (O(1))
+for hex_coords, pixel_pos in pixel_cache.items():
+    draw_hexagon(pixel_pos, size, color)
+```
+
+### Click Detection
+
+```python
+def on_click(event):
+    # Convert click pixels to logical coordinates
+    q, r = pixel_to_hex(event.x, event.y, size, center_x, center_y)
+
+    # Verify validity
+    if is_valid(q, r, R):
+        # Process order/selection
+        process_click(q, r)
+```
+
+---
+
+## Quick Reference Table
+
+| Operation | Complexity | Use Case |
+|-----------|-----------|----------|
+| Distance | O(1) | Check if in range |
+| Neighbors | O(1) | Find adjacent hexes |
+| Line | O(distance) | Visibility, projectiles |
+| Ring | O(distance) | Area effects |
+| Pixel-Hex | O(1) | Click detection |
+| BFS Pathfinding | O(board_size) | Movement validation |
+| Flood Fill | O(board_size) | Connectivity check |
+
+---
+
+**END OF DOCUMENT**

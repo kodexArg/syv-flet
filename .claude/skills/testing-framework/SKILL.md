@@ -1,174 +1,90 @@
 ---
 name: testing-framework
-description: Write and run tests using pytest with coverage tracking. Use when creating unit tests, checking code coverage, validating functionality, or ensuring test-driven development.
-allowed-tools: Bash, Read, Grep, Write, Edit
+description: Testing approach and practices. Tests are written with Behavior-Driven Development (BDD) using pytest. Quick reference for testing standards.
+allowed-tools: Bash, Read
 ---
 
-# SyV-Flet Testing Framework
+# Testing Framework
 
-SyV-Flet uses `pytest` with coverage tracking. **Use `uv`, never pip.**
+SyV-Flet testing uses **Behavior-Driven Development (BDD)** with pytest.
 
-## Quick Start
+---
 
-```bash
-# Install dependencies
-uv sync
+## Core Principle
 
-# Run all tests
-uv run pytest tests/ -v
+Every test describes a **use case**, not implementation details.
 
-# Run with coverage
-uv run pytest tests/ --cov=src
-
-# Generate HTML coverage report
-uv run pytest tests/ --cov=src --cov-report=html
+```
+Test name = User behavior or system outcome
+Example: "test_user_can_place_attack_order"
+NOT: "test_attack_order_object_creation"
 ```
 
-## Writing Tests
-
-Use this standard structure:
-
-```python
-import pytest
-from src.syv_flet.engine.board import Board
-
-class TestBoard:
-    def setup_method(self):
-        """Fixture: runs before each test."""
-        self.board = Board(width=8, height=8)
-
-    def test_board_initialization(self):
-        """Verify board initializes correctly."""
-        assert self.board.width == 8
-        assert len(self.board.tiles) == 64
-
-    def test_board_get_tile(self):
-        """Test tile retrieval by coordinates."""
-        tile = self.board.get_tile(q=0, r=0)
-        assert tile is not None
-
-    def test_board_invalid_coordinates(self):
-        """Test edge case: invalid coordinates."""
-        with pytest.raises(ValueError):
-            self.board.get_tile(q=1000, r=1000)
-```
-
-## Coverage Goals
-
-- **Target:** 80%+ coverage for `engine/`
-- **UI coverage:** Focus on critical controllers
-- **Commands:**
-  ```bash
-  uv run pytest tests/ --cov=src.syv_flet.engine
-  uv run pytest tests/ --cov-report=html
-  open htmlcov/index.html
-  ```
-
-## Common Commands
-
-```bash
-# Run specific file
-uv run pytest tests/test_board.py -v
-
-# Run specific test class
-uv run pytest tests/test_board.py::TestBoard -v
-
-# Run specific test
-uv run pytest tests/test_board.py::TestBoard::test_initialization -v
-
-# Run by keyword
-uv run pytest tests/ -k "hex" -v
-
-# Run last failed
-uv run pytest --lf
-
-# Run failed first
-uv run pytest --ff
-
-# Watch mode (requires pytest-watch)
-uv run pytest tests/ --watch
-```
+---
 
 ## Test Organization
 
 ```
 tests/
-├── test_board.py          # Board logic
-├── test_units.py          # Unit entities
-├── test_combat.py         # Combat mechanics
-├── test_compass.py        # Compass logic
-├── test_geometry.py       # Math utilities
-├── test_ui_controller.py  # UI controllers (mocked Flet)
-└── conftest.py            # Shared fixtures
+├── test_cycle_tap.py           (Tap cycling behavior)
+├── test_order_placement.py     (Order mechanics)
+├── test_movement_paths.py      (Movement resolution)
+├── test_combat_resolution.py   (Combat logic)
+├── test_board_state.py         (Board operations)
+└── conftest.py                 (Shared fixtures)
 ```
 
-## Example: Unit Test with Fixtures
+---
 
-```python
-# tests/conftest.py
-import pytest
-from src.syv_flet.engine.board import Board
-from src.syv_flet.engine.units import Unit, UnitType
+## BDD Approach
 
-@pytest.fixture
-def board():
-    return Board(width=20, height=20)
+Write tests that describe what the user **does** and what **happens**:
 
-@pytest.fixture
-def unit():
-    return Unit(
-        id="unit_1",
-        faction="team_a",
-        type=UnitType.INFANTRY,
-        pos=(0, 0)
-    )
+- **Given:** Initial game state
+- **When:** User performs action
+- **Then:** Expected outcome occurs
 
-# tests/test_units.py
-def test_unit_takes_damage(unit):
-    unit.take_damage(10)
-    assert unit.health == 90
+---
 
-def test_unit_dies(unit):
-    unit.take_damage(100)
-    assert unit.is_alive == False
-```
+## Running Tests
 
-## Debugging Tests
+- Run all tests: `uv run pytest tests/ -v`
+- Check coverage: `uv run pytest tests/ --cov=src`
+- Run specific test file: `uv run pytest tests/test_cycle_tap.py`
 
-```bash
-# Show print statements
-uv run pytest tests/test_board.py -v -s
+---
 
-# Drop into debugger on failure
-uv run pytest tests/ --pdb
+## Coverage Target
 
-# Show local variables on failure
-uv run pytest tests/ -l
+- **Engine logic:** 80%+ coverage required
+- **UI layer:** Focus on critical controllers
+- **No coverage for:** Integration stubs, mock setup code
 
-# Verbose traceback
-uv run pytest tests/ --tb=long
-```
+---
 
-## Performance
+## Test Fixtures
 
-- **Fast tests:** < 100ms total
-- **Slow tests:** Mark with `@pytest.mark.slow` and run separately
-  ```python
-  @pytest.mark.slow
-  def test_pathfinding_large_board():
-      ...
+Fixtures describe game states, not test utilities:
 
-  # Run: uv run pytest tests/ -m "not slow"
-  ```
+- `board_empty` – Blank game board
+- `player_with_units` – Player with starting units
+- `pending_orders` – Pre-populated order pool
+- `mid_execution_state` – Game in EJECUCIÓN phase
 
-## CI/CD Integration
+---
 
-See `.claude/docs/02-development-guide.md` for Git hooks and CI setup.
+## Assertions
 
-Before commit:
-```bash
-uv run pytest tests/ -v
-uv run pytest tests/ --cov=src --cov-report=term-missing
-uv run black src/ tests/
-uv run ruff check --fix src/ tests/
-```
+Tests assert **outcomes**, not intermediate states:
+
+- ✓ Correct: `assert order_placed.type == "ATTACK"`
+- ✓ Correct: `assert player.available_orders == 2`
+- ✗ Wrong: `assert _internal_state_modified == True`
+
+---
+
+## Note
+
+This is a **quick reference** for testing philosophy. Detailed implementation follows BDD conventions: test names are descriptive, test suites are organized by use case, and fixtures represent game states.
+
+For comprehensive pytest documentation, see official pytest docs.
