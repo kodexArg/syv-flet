@@ -15,12 +15,12 @@ Un juego de estrategia por turnos simultáneos (WEGO) 1v1 sobre un tablero hexag
 
 ## 2. Stack Tecnológico
 
-* **Lenguaje:** Python 3.12+
-* **Framework UI:** Flet (versión estable)
+* **Lenguaje:** Python 3.12+ (3.13+ recommended)
+* **Framework UI:** Flet (v0.24.0+)
 * **Motor de Renderizado:** `flet.canvas` (Skia Engine via Flutter)
 * **Empaquetado:** `flet build` (APK, Linux AppImage/Executable)
 * **Gestión de Estado:** Python nativo (clases observables)
-* **Logging:** Loguru (configuración centralizada en `src/logging_config.py`)
+* **Logging:** Loguru (configuración centralizada en `src/syv-flet/utils/logger.py`)
 * **Dependencias Externas:** Loguru (logging); ninguna para lógica de negocio
 
 ---
@@ -42,7 +42,7 @@ Un juego de estrategia por turnos simultáneos (WEGO) 1v1 sobre un tablero hexag
 ## 3. Mecánica de Juego
 
 ### Sistema de Coordenadas
-* **Modelo:** Coordenadas cúbicas `(q, r, s)` donde `q + r + s = 0`, proyectadas a coordenadas axiales `(q, r)` para optimización de memoria (ver [Documentación Técnica: Grillas Hexagonales](./.claude/docs/about-hexagonal-coordinates.md))
+* **Modelo:** Coordenadas cúbicas `(q, r, s)` donde `q + r + s = 0`, proyectadas a coordenadas axiales `(q, r)` para optimización de memoria (ver [ARCHITECTURE.md](./ARCHITECTURE.md) para detalles técnicos)
 * **Tablero:** Radio R=20 (fórmula: `3*R*(R+1) + 1` = 1,261 hexágonos)
 * **Adyacencia:** 6 vecinos inmediatos calculados mediante vectores de dirección constantes
 * **Distancia:** Manhattan hexagonal: `dist(a, b) = (|a.q - b.q| + |a.q + a.r - b.q - b.r| + |a.r - b.r|) / 2`

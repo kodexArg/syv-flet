@@ -88,6 +88,6 @@ This folder exists for future expansion but contains nothing functional.
 
 ## Related Documentation
 
-- [ARCHITECTURE.md](../../ARCHITECTURE.md) — System design (no auth layer)
-- [PRD.md](../../PRD.md) — Product spec (mentions "single device / hot seat")
+- [ARCHITECTURE.md](../../docs/ARCHITECTURE.md) — System design (no auth layer)
+- [PRD.md](../../docs/PRD.md) — Product spec (mentions "single device / hot seat")
 - Configuration: [configuration-management skill](../configuration-management/SKILL.md)

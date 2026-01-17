@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 '$CLAUDE_PROJECT_DIR'/.claude/hooks/format-file.py",
+            "command": "python3 $CLAUDE_PROJECT_DIR/.claude/hooks/format-file.py",
             "description": "Auto-format Python files with Black and Ruff"
           }
         ]
@@ -18,7 +18,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 '$CLAUDE_PROJECT_DIR'/.claude/hooks/protect-files.py",
+            "command": "python3 $CLAUDE_PROJECT_DIR/.claude/hooks/protect-files.py",
             "description": "Protect critical files from modification"
           }
         ]
@@ -28,7 +28,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 '$CLAUDE_PROJECT_DIR'/.claude/hooks/validate-command.py",
+            "command": "python3 $CLAUDE_PROJECT_DIR/.claude/hooks/validate-command.py",
             "description": "Validate bash commands for best practices"
           }
         ]
@@ -40,7 +40,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "cat '$CLAUDE_PROJECT_DIR'/.claude/README.md",
+            "command": "cat $CLAUDE_PROJECT_DIR/.claude/README.md",
             "description": "Load SyV-Flet documentation index on startup"
           }
         ]

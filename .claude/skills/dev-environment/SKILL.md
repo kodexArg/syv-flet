@@ -597,7 +597,7 @@ uv run python -m syv_flet.main
 
 ## Next Steps
 
-- See `PRD.md` for complete product specification
+- See [PRD.md](../../docs/PRD.md) for complete product specification
 - See `code-standards` skill for mandatory code standards
 - See `hex-grid-math` skill for hexagonal coordinate mathematics
 - Explore `src/syv_flet/` directory structure

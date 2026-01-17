@@ -33,7 +33,7 @@ Complemento al [PRD.md](./PRD.md). Define la estructura de carpetas, separación
 
 ```
 syv-flet/
-├── src/syv_flet/
+├── src/syv-flet/
 │   ├── __init__.py
 │   ├── main.py                      ← Entry point (Flet app)
 │   │
@@ -297,7 +297,7 @@ engine/events.py          → tests/test_events.py
 
 ## Configuration: Hardcoded Values
 
-**All in `configs.yaml`. See configuration skill for details.**
+**All in `configs.yaml`. See [configuration-management skill](../skills/configuration-management/SKILL.md) for details.**
 
 Examples:
 ```yaml
@@ -360,7 +360,7 @@ ui:
 
 - [PRD.md](./PRD.md) — Complete product spec
 - [REQUIREMENTS.md](./REQUIREMENTS.md) — Dependencies
-- [hex-grid-math skill](./claude/skills/hex-grid-math/SKILL.md) — Coordinate math
-- [state-machine skill](./claude/skills/state-machine/SKILL.md) — FSM design
-- [cycle-tap-mechanism skill](./claude/skills/cycle-tap-mechanism/SKILL.md) — Tap logic
-- [code-standards skill](./claude/skills/code-standards/SKILL.md) — SOLID principles
+- [hex-grid-math skill](../skills/hex-grid-math/SKILL.md) — Coordinate math
+- [state-machine skill](../skills/state-machine/SKILL.md) — FSM design
+- [cycle-tap-mechanism skill](../skills/cycle-tap-mechanism/SKILL.md) — Tap logic
+- [code-standards skill](../skills/code-standards/SKILL.md) — SOLID principles

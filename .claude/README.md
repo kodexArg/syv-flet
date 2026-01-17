@@ -5,31 +5,25 @@ This directory contains comprehensive documentation and automatic Claude Code sk
 ## Documentation Files
 
 ### Architecture & Design
-- **`docs/01-flet-architecture.md`** — Flet layered architecture, design patterns, and component hierarchy
-  - Stack structure, engine/UI separation, data flow patterns
-  - Main Flet components reference with official docs links
-  - Best practices for performance and responsiveness
+- **[ARCHITECTURE.md](docs/ARCHITECTURE.md)** — System design, layered architecture, and component hierarchy
+  - Hexagonal architecture (ports & adapters pattern)
+  - Engine/UI separation and data flow patterns
+  - Decoupled repository pattern and event-driven observer
+  - Folder structure and dependency injection
 
-### Development Workflow
-- **`docs/02-development-guide.md`** — Local development commands, terminal operations, and CI/CD
-  - Setup with `uv` package manager (no pip)
-  - Testing, formatting (Black + Ruff), debugging
-  - Git workflow, IDE configuration, troubleshooting
+### Product Specification
+- **[PRD.md](docs/PRD.md)** — Complete product requirements and game mechanics
+  - Game mechanics: turn resolution, combat system, 5-hexagon rule
+  - UI/UX design philosophy (radical minimalism with Kenney assets)
+  - Hexagonal coordinate system and board layout
+  - Acceptance criteria and data structures
 
-### Code Standards
-- **`docs/03-code-standards.md`** — Mandatory code quality and scalability standards
-  - S.O.L.I.D. principles (non-negotiable)
-  - Zero-comment policy with semantic docstrings only
-  - Pydantic V2+ for data validation
-  - Modern Python 3.13+ patterns (Protocols, Generics, Pattern Matching)
-  - Open/Closed principle for extensible architecture
-
-### Technical Reference
-- **`docs/hexagonal-grid-coordinates.md`** — Deep dive into cubic coordinate systems for hex grids
-  - Mathematical foundations and operations (adjacency, distance)
-  - Pixel ↔ coordinate conversions
-  - Common algorithms (pathfinding, flood fill, line drawing)
-  - SyV-Flet-specific implementations
+### Requirements & Dependencies
+- **[REQUIREMENTS.md](docs/REQUIREMENTS.md)** — Dependencies, versions, and installation
+  - Runtime libraries (Python, Flet, Loguru)
+  - Development & testing tools (pytest, Black, Ruff, pyright)
+  - Package management with `uv`
+  - Asset packs and environment setup
 
 ## Automatic Claude Code Skills
 

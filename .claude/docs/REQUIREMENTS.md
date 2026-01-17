@@ -13,6 +13,7 @@ Complemento al [PRD.md](./PRD.md). Lista las librerías necesarias y sus version
 | **Python** | 3.12+ | Runtime (3.13 recommended) |
 | **Flet** | 0.24+ | UI framework (canvas, gestures, responsiveness) |
 | **Loguru** | 0.7.0+ | Centralized logging (file rotation + color output) |
+| **Pydantic** | 2.0+ | Data validation (unit/hex models, config validation) |
 
 ---
 
@@ -35,12 +36,23 @@ Complemento al [PRD.md](./PRD.md). Lista las librerías necesarias y sus version
 
 ---
 
+## Configuration Management
+
+**Single Source of Truth:** `configs.yaml` at project root
+
+All tunable parameters (board size, movement distance, UI colors, FPS targets) live in a centralized YAML file, loaded at startup via `src/syv_flet/utils/config_loader.py`.
+
+**Key Principle:** Zero magic numbers in source code. All constants → `configs.yaml`.
+
+See [configuration-management skill](../skills/configuration-management/SKILL.md) for structure and usage patterns.
+
+---
+
 ## Optional / Future
 
 | Library | Version | Purpose |
 |---------|---------|---------|
-| **pydantic** | 2.0+ | Data validation (for unit/hex models) |
-| **python-dotenv** | 1.0+ | Load `.env` configuration |
+| **python-dotenv** | 1.0+ | Load `.env` configuration (environment-specific overrides) |
 | **pytest-cov** | 4.0+ | Coverage reporting |
 
 ---
@@ -74,4 +86,4 @@ uv run pytest    # Run tests
 uv run python -m syv_flet.main  # Run app
 ```
 
-See [dev-environment skill](./claude/skills/dev-environment/SKILL.md) for detailed setup.
+See [dev-environment skill](../skills/dev-environment/SKILL.md) for detailed setup.

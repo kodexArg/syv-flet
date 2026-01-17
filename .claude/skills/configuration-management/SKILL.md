@@ -217,5 +217,5 @@ config_obj = BoardConfig(**config["board"])
 
 ## See Also
 
-- [ARCHITECTURE.md](../../ARCHITECTURE.md) — Where configs fit in design
+- [ARCHITECTURE.md](../../docs/ARCHITECTURE.md) — Where configs fit in design
 - [dev-environment skill](../dev-environment/SKILL.md) — Setup instructions

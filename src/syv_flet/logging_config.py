@@ -2,9 +2,11 @@
 Configuración centralizada de logging con loguru.
 Inicializa logs por módulo, persiste en logs/ y siempre emite a stderr.
 """
+
 import os
 import sys
 from pathlib import Path
+
 from loguru import logger
 
 # Remover handler default
@@ -52,4 +54,4 @@ logger.add(
     retention="30 days",
 )
 
-__all__ = ["logger", "LOGS_DIR"]
+__all__ = ["LOGS_DIR", "logger"]

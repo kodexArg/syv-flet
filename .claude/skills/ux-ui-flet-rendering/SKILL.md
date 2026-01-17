@@ -464,7 +464,7 @@ control.animate_scale(scale=1.05, duration_ms=100)
 | `src/syv_flet/ui/screens/game_screen.py` | Game view (grid + buttons) |
 | `src/syv_flet/ui/components/hex_grid.py` | Hex grid widget |
 | `src/syv_flet/ui/controllers/game_controller.py` | UI ↔ Engine bridge |
-| `PRD.md` (Section 4) | Complete UI/UX specification |
+| [PRD.md](../../docs/PRD.md) (Section 4) | Complete UI/UX specification |
 
 ## Related Skills & Documentation
 
