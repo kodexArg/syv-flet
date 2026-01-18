@@ -1,0 +1,7 @@
+# Archivos ignorados por Antigravity
+# Estos archivos existen en disco pero no deben ser leídos ni procesados por el agente.
+
+.antigravity/settings.json
+.antigravity/hooks/
+.antigravity/agents/
+.claude/
