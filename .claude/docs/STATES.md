@@ -1,0 +1,26 @@
+GamePhase
+  PLANNING
+  EXECUTION
+  RESET
+
+UnitType
+  INFANTRY
+  OFFICER
+  CAPTAIN
+
+UnitStatus
+  ACTIVE
+  ROUTED
+  RETREAT
+  ELIMINATED
+
+TerrainType
+  GRASS
+  WATER
+
+OrderType
+  ATTACK
+  MOVE
+  DEPLOY
+  DEFEND
+  CANCEL

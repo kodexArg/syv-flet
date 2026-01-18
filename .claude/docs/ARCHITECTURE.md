@@ -2,30 +2,30 @@
 
 **SyV-Flet - System Architecture**
 
-Complemento al [PRD.md](./PRD.md). Define la estructura de carpetas, separación de capas, y decisiones de diseño.
+Complemento al [PRD.md](./PRD.md). Define la estructura de carpetas, separación de capas, y decisiones de diseño para el MVP local.
 
 ---
 
 ## Design Principles
 
-1. **Hexagonal Architecture (Ports & Adapters)**
-   - Engine logic completely independent of Flet UI
-   - Dependencies flow inward (UI → Controllers → Engine)
+1. **Hexagonal Architecture (Engine/UI Separation)**
+   - Game logic (engine) completamente independiente de Flet
+   - La UI es reemplazable sin tocar el motor
+   - Dependencias fluyen hacia adentro: UI → Engine
 
-2. **Decoupled Repository Pattern**
-   - Unit data lives in `UnitRepository` (not in Hexagons)
-   - Repository abstraction allows future database/multiplayer without changing engine
-   - Single source of truth for all unit state
+2. **Hash Maps como Single Source of Truth**
+   - Estado del juego vive en tres Hash Maps: `mapa`, `unidades`, `ordenes`
+   - GameState es el contenedor central
+   - Acceso directo O(1) para mantener 60 FPS
 
-3. **Event-Driven Observer Pattern**
-   - Engine emits events; UI subscribes
-   - No back-references: UI never pulls state from engine
-   - Enables multiplayer: events serialize to JSON for network
+3. **Minimal Configuration**
+   - Todos los valores hardcodeados viven en `configs.yaml`
+   - Cero magic numbers en código fuente
+   - Un solo archivo para todos los parámetros ajustables
 
-4. **Minimal Configuration**
-   - All hardcoded values live in `configs.yaml`
-   - Zero magic numbers in source code
-   - Single file for all tunable parameters
+4. **Arquitectura Evolucionable**
+   - El diseño permite migración futura a servidor cloud sin refactoring mayor
+   - Motor agnóstico al origen de datos (local MVP → API remota v2.0)
 
 ---
 
@@ -39,13 +39,12 @@ syv-flet/
 │   │
 │   ├── engine/                      ← Game logic (UI-agnostic)
 │   │   ├── __init__.py
-│   │   ├── board.py                 ← HexagonGrid (Q,R coords)
-│   │   ├── unit.py                  ← Unit data model
-│   │   ├── repository.py            ← UnitRepository (Protocol + InMemory)
+│   │   ├── game_state.py            ← GameState (Hash Maps: mapa, unidades, ordenes)
+│   │   ├── board.py                 ← Hexagon grid operations (Q,R coords)
 │   │   ├── game_controller.py       ← FSM (PLANNING/EXECUTION/RESET phases)
-│   │   ├── order.py                 ← Order types & resolution logic
-│   │   ├── combat.py                ← Combat resolution (deterministic)
-│   │   └── events.py                ← EventBus (centralized event dispatch)
+│   │   ├── tap_cycle.py             ← Tap cycling validation (stateless)
+│   │   ├── order.py                 ← Order types & validation
+│   │   └── combat.py                ← Combat resolution (deterministic)
 │   │
 │   ├── ui/                          ← Flet-specific (replaceable)
 │   │   ├── __init__.py
@@ -64,7 +63,7 @@ syv-flet/
 │   │   │
 │   │   ├── controllers/
 │   │   │   ├── __init__.py
-│   │   │   └── game_ui_controller.py ← Bridges UI ↔ Engine (listens to EventBus)
+│   │   │   └── game_ui_controller.py ← Bridges UI ↔ Engine (lee GameState)
 │   │   │
 │   │   └── styles/
 │   │       ├── __init__.py
@@ -110,51 +109,52 @@ syv-flet/
 
 ### Layer 1: Engine (Agnostic to UI)
 
-**Board (`engine/board.py`)**
-- Axial coordinates `(q, r)` only
-- Queries: `is_valid(q, r)`, `neighbors(q, r)`, `distance(a, b)`
-- No Flet imports
-
-**Units & Repository (`engine/unit.py`, `engine/repository.py`)**
+**GameState (`engine/game_state.py`)**
 ```
-Protocol UnitRepository:
-  ├─ get(uid) → Unit
-  ├─ create(unit) → None
-  ├─ move(uid, q, r) → None
-  ├─ update_status(uid, status) → None
-  └─ subscribe(listener) → None
+Contiene los tres Hash Maps:
+  - mapa: {(q, r): hex_data}          # Topología fija del tablero
+  - unidades: {unit_id: unit_data}    # Estado de todas las unidades
+  - ordenes: {order_id: order_data}   # Órdenes con limpieza FIFO
 
-Concrete: InMemoryUnitRepository (MVP)
+Gestiona:
+  - IDs incrementales (next_unit_id, next_order_id)
+  - Limpieza automática de órdenes antiguas (deque con maxlen)
+  - Estado global: current_phase, active_player, turn_number
+```
+
+**Board (`engine/board.py`)**
+```
+Operaciones sobre coordenadas hexagonales:
+  - is_valid(q, r) → bool
+  - neighbors(q, r) → list[(q, r)]
+  - distance(a, b) → int
+  - get_unit_at(q, r) → unit_id | None
+
+Inicializa el Hash Map mapa con terrenos
 ```
 
 **Game Controller (`engine/game_controller.py`)**
 ```
 FSM Phases:
-  PLANNING    → Player places orders (tap cycling)
-  EXECUTION   → Orders resolve simultaneously
-  RESET       → Cleanup (5-hex rule, dead units)
+  PLANNING    → Jugadores colocan órdenes
+  EXECUTION   → Resolver movimientos y combates
+  RESET       → Limpieza (Regla 5 Hexágonos), cambio de jugador
   └─→ back to PLANNING
 
-Responsibilities:
-  - Manage current_phase
-  - Route hex clicks to tap cycling state machine
-  - Trigger order resolution
-  - Emit events on state changes
+Responsabilidades:
+  - Gestionar current_phase en GameState
+  - Validar órdenes mediante tap_cycle
+  - Ejecutar resolución de turno
+  - Actualizar Hash Maps atómicamente
 ```
 
-**Events (`engine/events.py`)**
+**Tap Cycle (`engine/tap_cycle.py`)**
 ```
-EventBus (centralized):
-  - emit(event_type, **data)
-  - subscribe(event_type, listener)
-  - event_log (for debugging/replay)
+Validador stateless de órdenes:
+  - validate_tap(hex, current_selection, board) → valid/invalid
+  - suggest_order(from_hex, to_hex) → OrderType | None
 
-Event Types:
-  "hex_state_changed" {q, r, old_state, new_state}
-  "unit_moved" {uid, from_hex, to_hex}
-  "order_placed" {q, r, order_type, owner_id}
-  "phase_transitioned" {old_phase, new_phase}
-  "turn_complete" {}
+GameController lo usa para validar inputs antes de persistir
 ```
 
 ---
@@ -163,26 +163,25 @@ Event Types:
 
 **Game UI Controller (`ui/controllers/game_ui_controller.py`)**
 ```
-Purpose: Bridge between engine events and Flet widgets
-Pattern: Event subscriber (NOT event emitter)
+Propósito: Puente entre GameState y componentes Flet
 
-Listens to:
-  - "order_placed" → update hex grid visuals
-  - "phase_transitioned" → fade in/out orders
-  - "unit_moved" → animate unit position
+Responsabilidades:
+  - Leer GameState para renderizar UI
+  - Capturar clicks del usuario → enviar a GameController
+  - Actualizar componentes visuales tras cada fase
+  - Gestionar estado local de UI (selección, hover, opacidad)
 
-Responsibilities:
-  - Subscribe to engine EventBus
-  - Translate events → Flet component updates
-  - Handle user clicks → call engine methods
-  - Manage UI state (selection, hover, opacity)
+Flujo:
+  Usuario click → UI Controller → GameController.handle_tap()
+  GameController actualiza GameState
+  UI Controller lee GameState → actualiza canvas
 ```
 
 **Screen Components**
-- Menu: Static, just "Start Game" button
-- Game: Grid + buttons, responsive layout
-- Hex Grid: Canvas rendering + click→hex conversion
-- Order Overlay: Icons, labels, outlines on hexes
+- Menu: Botón "Start Game" estático
+- Game: Grid + botones, layout responsivo
+- Hex Grid: Canvas rendering + conversión click→hex
+- Order Overlay: Iconos y outlines sobre hexágonos
 
 ---
 
@@ -190,93 +189,92 @@ Responsibilities:
 
 **`main.py` orchestration:**
 ```
-1. Load configs from configs.yaml
-2. Create engine components:
-   - board = HexagonGrid(radius=configs.board_radius)
-   - unit_repo = InMemoryUnitRepository()  (or DatabaseRepository for multiplayer)
-   - event_bus = EventBus()
-   - game_ctrl = GameController(board, unit_repo, event_bus)
+1. Cargar configuración desde configs.yaml
 
-3. Create UI components:
-   - ui_ctrl = GameUIController(event_bus, game_ctrl)
+2. Crear componentes del engine:
+   - game_state = GameState(
+       board_radius=configs.board_radius,
+       max_order_history=configs.max_order_history
+     )
+   - game_ctrl = GameController(game_state)
+
+3. Crear componentes de UI:
+   - ui_ctrl = GameUIController(game_ctrl, game_state)
    - game_screen = GameScreen(ui_ctrl)
    - app = FletApp([menu_screen, game_screen])
 
-4. Start Flet: app.run()
+4. Iniciar Flet: app.run()
 ```
 
 ---
 
 ## Key Architectural Decisions
 
-### 1. Unit Repository Decoupling
+### 1. Hash Maps como Estructura Central
 
-**Why:** Future multiplayer backend
-- Swap `InMemoryUnitRepository` ↔ `DatabaseRepository` at startup
-- Engine code unchanged
-- UI code unchanged
-- Only main.py DI logic changes
+**Decisión:** Estado del juego en tres Hash Maps directos (mapa, unidades, ordenes)
 
-**Example migration path:**
-```
-MVP:  InMemoryUnitRepository (all units in RAM)
-      ↓
-MP:   DatabaseUnitRepository (PostgreSQL, one source of truth)
-      ↓
-Network: EventBus events serialized → WebSocket → other clients
-```
+**Razón:**
+- Acceso O(1) crítico para 60 FPS
+- Simplicidad sobre abstracción
+- Sincronización explícita entre estructuras
+- Perfilado fácil de memory usage
 
-### 2. EventBus (Not Callbacks)
+**Trade-off aceptado:** Menos abstracción que Repository Pattern, pero más directo y performante para MVP
 
-**Why:** Scalable, debuggable, multiplayer-ready
-- Single event_log for replay/debug
-- No scattered callbacks
-- Easy to add new listeners (UI, analytics, network)
-- Events serialize to JSON trivially
+### 2. Engine Agnóstico a Origen de Datos
 
-**Example:**
-```
-Engine: event_bus.emit("unit_moved", uid="u1", from_hex=(5,3), to_hex=(6,3))
-  ↓
-EventLog: [{event_type: "unit_moved", timestamp: ..., data: {...}}]
-  ↓
-UI Controller: receives event → updates grid visuals
-  ↓
-Network (future): serialize event → broadcast to other clients
-```
+**Decisión:** GameController no sabe si GameState es local o remoto
 
-### 3. Configs in YAML
+**Razón:**
+- Permite evolución futura sin reescritura
+- En v2.0 cloud, GameState puede alimentarse desde API
+- Motor no cambia, solo cambia de dónde viene el estado
 
-**Why:** Human-readable, no magic numbers in code
-- Single source for R, hex_size, max_move_distance, 5-hex-rule distance
-- Tweakable without code rebuild
-- Easy to version-control (git diff is readable)
+**Nota:** Esto NO significa diseñar para futuro ahora. Simplemente evitamos acoplamientos innecesarios.
+
+### 3. Configs en YAML
+
+**Decisión:** Todos los valores hardcodeados en `configs.yaml`
+
+**Razón:**
+- Único archivo para parámetros ajustables
+- Sin magic numbers en código
+- Fácil version control (git diff legible)
+- Tweakable sin rebuild
+
+**Ejemplos:** board_radius, hex_size, max_order_history, faction_colors
 
 ---
 
-## State Machine (Tap Cycling) — Where Does It Live?
+## State Machine (FSM y Tap Cycling)
 
-The **tap cycling logic** (origin hex selected → adjacent orders → cycles) is **NOT in GameController**.
+### Game FSM (PLANNING → EXECUTION → RESET)
 
-**Proposed location: `engine/tap_cycle.py` (stateless)**
+**Ubicación:** `GameController.current_phase` (atributo de GameState)
+
+**Transiciones:**
 ```
-Pure function: tap_cycle_handler(state, hex_coords, board) → new_state
-
-Input:
-  - Current tap cycle state (which hex is origin, which order is selected)
-  - Hex clicked
-  - Board reference (to validate neighbors)
-
-Output:
-  - New tap cycle state
-  - Orders to place (if any)
-  - Events to emit (hex_state_changed, order_placed)
-
-GameController calls this on each hex click, updates its internal tap_state,
-emits resulting events.
+PLANNING   → Usuario coloca órdenes → "Next Turn" → EXECUTION
+EXECUTION  → Resolver turno → RESET
+RESET      → Limpieza, cambio jugador → PLANNING
 ```
 
-See `cycle-tap-mechanism` skill for pseudocode details.
+**Importante:** FSM es local en MVP. El motor ejecuta todo in-process.
+
+### Tap Cycling Logic
+
+**Ubicación:** `engine/tap_cycle.py` (funciones stateless)
+
+**Función:** Validar secuencias de taps del usuario
+```
+validate_tap(hex_clicked, current_selection, board) → valid/invalid
+suggest_order(from_hex, to_hex) → OrderType | None
+```
+
+**GameController** llama estas funciones antes de persistir órdenes en `GameState.ordenes`.
+
+Ver `cycle-tap-mechanism` skill para detalles completos.
 
 ---
 
@@ -284,37 +282,39 @@ See `cycle-tap-mechanism` skill for pseudocode details.
 
 **Test files mirror engine modules:**
 ```
+engine/game_state.py      → tests/test_game_state.py
 engine/board.py           → tests/test_board.py
-engine/unit.py            → tests/test_units.py
 engine/order.py + combat  → tests/test_combat.py
 engine/game_controller.py → tests/test_game_phases.py
-engine/events.py          → tests/test_events.py
+engine/tap_cycle.py       → tests/test_tap_cycle.py
 ```
 
-**No UI tests initially** (UI is visual; screenshot tests are fragile).
+**No UI tests initially** (UI es visual; screenshot tests son frágiles).
 
 ---
 
 ## Configuration: Hardcoded Values
 
-**All in `configs.yaml`. See [configuration-management skill](../skills/configuration-management/SKILL.md) for details.**
+**Todo en `configs.yaml`. Ver [configuration-management skill](../skills/configuration-management/SKILL.md) para detalles.**
 
-Examples:
+Ejemplos:
 ```yaml
+game_state:
+  board_radius: 20              # Tamaño tablero: 3*R*(R+1) + 1 = 1,261 hexs
+  max_order_history: 500        # Máx órdenes en historial FIFO
+
 board:
-  radius: 20                    # Board size formula: 3*R*(R+1) + 1
   hex_size_desktop: 64          # pixels
   hex_size_mobile: 40
 
 rules:
-  max_move_distance: 3
-  max_support_distance: 5       # 5-hex rule
-  tie_behavior: "static"        # Combat tie result: units remain static
+  max_support_distance: 5       # Regla de los 5 Hexágonos
+  tie_behavior: "static"        # Empate de combate: unidades estáticas
 
 ui:
   faction_colors:
-    player_1: "#2196F3"         # Blue
-    player_2: "#F44336"         # Red
+    player_1: "#2196F3"         # Azul
+    player_2: "#F44336"         # Rojo
   opacity:
     planning_phase: 0.4
     execution_phase: 1.0
@@ -322,37 +322,29 @@ ui:
 
 ---
 
-## Scalability Notes
-
-1. **Large Boards (R > 20):**
-   - Implement viewport culling in hex_grid.py (only render visible hexes)
-   - Cache pixel positions for all hexes (1,261 pre-calculated)
-
-2. **Many Units (>500):**
-   - Repository already abstracts storage; swap to database
-   - Filter queries (units_by_player, units_by_status) become SQL queries
-
-3. **Network Multiplayer:**
-   - EventBus events → JSON serialization
-   - Send events over WebSocket
-   - Remote client replays events locally
-
----
-
 ## Files Checklist (MVP Critical Path)
 
-- [x] `engine/board.py` — Board queries
-- [x] `engine/unit.py` + `repository.py` — Unit storage
-- [x] `engine/game_controller.py` — Phase FSM
-- [x] `engine/order.py` — Order types & validation
-- [x] `engine/combat.py` — Combat resolution
-- [ ] `engine/events.py` — EventBus
-- [ ] `engine/tap_cycle.py` — Tap cycling logic (stateless)
-- [ ] `ui/screens/game_screen.py` — Main game view
-- [ ] `ui/components/hex_grid.py` — Canvas + click detection
-- [ ] `ui/controllers/game_ui_controller.py` — Event bridge
-- [ ] `configs.yaml` — All hardcoded values
-- [ ] `tests/` — Full BDD test coverage
+**Engine (Game Logic):**
+- [ ] `engine/game_state.py` — GameState con Hash Maps
+- [ ] `engine/board.py` — Operaciones hexagonales
+- [ ] `engine/game_controller.py` — FSM (PLANNING/EXECUTION/RESET)
+- [ ] `engine/tap_cycle.py` — Validación de taps (stateless)
+- [ ] `engine/order.py` — Tipos de órdenes y validación
+- [ ] `engine/combat.py` — Resolución de combate determinista
+
+**UI (Flet Interface):**
+- [ ] `ui/screens/menu_screen.py` — Pantalla de inicio
+- [ ] `ui/screens/game_screen.py` — Vista principal del juego
+- [ ] `ui/components/hex_grid.py` — Renderizado canvas + detección de clicks
+- [ ] `ui/components/order_overlay.py` — Iconos de órdenes sobre hexágonos
+- [ ] `ui/controllers/game_ui_controller.py` — Puente UI ↔ Engine
+
+**Configuration & Tests:**
+- [ ] `configs.yaml` — Todos los valores hardcodeados
+- [ ] `tests/test_game_state.py` — Tests de Hash Maps + FIFO
+- [ ] `tests/test_board.py` — Tests de grid hexagonal
+- [ ] `tests/test_game_phases.py` — Tests de FSM
+- [ ] `tests/test_combat.py` — Tests de resolución de combate
 
 ---
 
