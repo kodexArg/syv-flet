@@ -16,14 +16,13 @@ Especialista en **lógica del motor de juego** SyV-Flet, desacoplado de UI.
 
 ## Responsabilidades
 
-1. **board.py** - HexagonGrid, coordenadas axiales (q, r)
-2. **unit.py** - Unit models con Pydantic V2+
-3. **repository.py** - UnitRepository protocol + InMemory impl
-4. **game_controller.py** - FSM (PLANNING→EXECUTION→RESET)
-5. **order.py** - Order types, validation, resolution
-6. **combat.py** - Deterministic combat (no randomness)
-7. **events.py** - EventBus pub/sub
-8. **tap_cycle.py** - Tap state machine (stateless)
+1. **game_state.py** - GameState (Pydantic), Hash Maps (map, units, orders)
+2. **board.py** - Hexagon grid operations, coordenadas axiales (q, r)
+3. **game_controller.py** - FSM (PLANNING→EXECUTION→RESET)
+4. **order.py** - Order types, validation, resolution
+5. **combat.py** - Deterministic combat
+6. **events.py** - EventBus pub/sub
+7. **tap_cycle.py** - Tap validation (stateless)
 
 ## Principios Obligatorios
 

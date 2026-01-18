@@ -242,69 +242,99 @@ Retrieved from https://kenney.nl/assets
 
 ---
 
-## 7. Arquitectura de Datos: Hash Maps
+## 7. Arquitectura de Datos
 
 **IMPORTANTE (MVP):** Todo el GameState es volátil. El estado completo se pierde al cerrar la aplicación. No hay funcionalidad de guardar/cargar partidas en esta versión.
 
-La clave de esta implementación es la **separación de responsabilidades**. No guardamos "todo dentro de todo", sino que usamos IDs para vincular las diferentes tablas. Este diseño permite que el motor lógico funcione tanto localmente (MVP) como en servidor cloud (v2.0 multijugador).
+### 7.1 GameState (Pydantic)
 
-### 7.1 Mapa Hexagonal (Topología Fija)
+```python
+class GameState(BaseModel):
+    map: Dict[Tuple[int, int], HexData]
+    units: Dict[str, UnitData]
+    orders: Dict[str, OrderData]
 
-Coordenadas axiales `(q, r)` como claves. Base espacial del juego con 1,261 hexágonos (radio 20). La topología del tablero no cambia durante la partida.
+    current_phase: GamePhase
+    active_player: int
+    turn_number: int
 
-**Estructura:** `mapa = {(q, r): hex_data}`
+    selected_hex: Optional[Tuple[int, int]]
+    order_path: List[Tuple[int, int]]
 
-| Campo | Tipo | Valores | Descripción |
-|-------|------|---------|-------------|
-| `terreno` | int | 0=GRASS, 1=WATER | Tipo de terreno. GRASS es transitable, WATER es obstáculo |
-| `unit_id` | int/None | ID numérico o None | Referencia a la unidad presente. None si el hexágono está vacío |
-| `last_order_id` | int/None | ID numérico o None | Última orden ejecutada aquí. Útil para feedback visual en UI |
+    next_unit_id: int
+    next_order_id: int
+    order_history: deque
+```
 
-**Notas:**
-- La clave `(q, r)` es una tupla de coordenadas axiales
-- Un hexágono vacío tiene `unit_id: None`
-- El campo `last_order_id` permite mostrar indicadores visuales de acciones recientes
+### 7.2 Mapa Hexagonal
 
-### 7.2 Registro de Unidades
+Coordenadas axiales `(q, r)` como claves. 1,261 hexágonos (radio 20).
 
-Repositorio centralizado donde cada unidad tiene un ID único. Facilita la **Regla de los 5 Hexágonos** y el cálculo de fuerzas. El estado de las unidades cambia durante el juego (movimiento, combate, eliminación).
+**Estructura:** `map = {(q, r): HexData}`
 
-**Estructura:** `unidades = {unit_id: unit_data}`
+```python
+class HexData(BaseModel):
+    terrain: TerrainType
+    occupant_id: Optional[str]
+    last_order_id: Optional[str]
+    attributes: Dict[str, Any]
+```
 
-| Campo | Tipo | Valores | Descripción |
-|-------|------|---------|-------------|
-| `bando` | int | 0 o 1 | Jugador 1 (0) o Jugador 2 (1) |
-| `tipo` | str | INFANTRY, OFFICER, CAPTAIN | Tipo de unidad según jerarquía militar |
-| `pos` | tuple | (q, r) | Coordenadas axiales actuales de la unidad |
-| `estado` | str | ACTIVE, ROUTED, RETREAT, ELIMINATED | Estado actual de la unidad |
+| Campo | Tipo | Descripción |
+|-------|------|-------------|
+| `terrain` | TerrainType | GRASS (transitable) o WATER (obstáculo) |
+| `occupant_id` | str/None | ID de unidad presente o None |
+| `last_order_id` | str/None | Última orden ejecutada aquí |
+| `attributes` | dict | Extensiones futuras (burning, elevation, etc.) |
 
-**Estados de Unidad:**
+### 7.3 Registro de Unidades
+
+**Estructura:** `units = {unit_id: UnitData}`
+
+```python
+class UnitData(BaseModel):
+    owner: int
+    unit_type: UnitType
+    position: Tuple[int, int]
+    status: UnitStatus
+```
+
+| Campo | Tipo | Descripción |
+|-------|------|-------------|
+| `owner` | int | 0 o 1 |
+| `unit_type` | UnitType | INFANTRY, OFFICER, CAPTAIN |
+| `position` | tuple | (q, r) coordenadas actuales |
+| `status` | UnitStatus | ACTIVE, ROUTED, RETREAT, ELIMINATED |
+
+**Estados:**
 
 | Estado | Descripción |
 |--------|-------------|
-| ACTIVE | Unidad operativa, puede recibir y ejecutar órdenes |
-| ROUTED | Unidad en desbandada, movimiento limitado hacia retaguardia |
-| RETREAT | Unidad en retirada ordenada, puede reagruparse |
-| ELIMINATED | Unidad eliminada del juego, no se procesa |
+| ACTIVE | Operativa |
+| ROUTED | En desbandada |
+| RETREAT | En retirada ordenada |
+| ELIMINATED | Eliminada |
 
-**Notas:**
-- El `unit_id` es un entero único incremental asignado al crear la unidad
-- El campo `pos` debe mantenerse sincronizado con `mapa[(q,r)].unit_id`
-- La transición de estados sigue reglas de combate y la Regla de los 5 Hexágonos
+### 7.4 Registro de Órdenes (FIFO)
 
-### 7.3 Registro de Órdenes (con Limpieza FIFO)
+**Estructura:** `orders = {order_id: OrderData}`
 
-ID incremental con sistema de historial. Las órdenes se guardan cronológicamente en memoria y se limpian automáticamente mediante sistema FIFO para prevenir memory leaks.
+```python
+class OrderData(BaseModel):
+    unit_id: str
+    order_type: OrderType
+    coords: Tuple[int, int] | Tuple[int, int, int, int]
+    turn: int
+    executed: bool
+```
 
-**Estructura:** `ordenes = {order_id: order_data}`
-
-| Campo | Tipo | Valores | Descripción |
-|-------|------|---------|-------------|
-| `unit_id` | int | ID numérico | Referencia a la unidad que ejecuta la orden |
-| `tipo` | str | ATTACK, MOVE, DEPLOY, DEFEND, CANCEL | Tipo de orden a ejecutar |
-| `coords` | tuple | (from_q, from_r, to_q, to_r) o (q, r) | Coordenadas origen/destino según tipo de orden |
-| `turno` | int | Número positivo | Número de turno en que se emitió la orden |
-| `executed` | bool | True/False | False mientras está pendiente, True tras resolución |
+| Campo | Tipo | Descripción |
+|-------|------|-------------|
+| `unit_id` | str | Unidad que ejecuta |
+| `order_type` | OrderType | ATTACK, MOVE, DEPLOY, DEFEND, CANCEL |
+| `coords` | tuple | Coordenadas origen/destino |
+| `turn` | int | Turno de emisión |
+| `executed` | bool | False pendiente, True tras resolución |
 
 ### 7.4 Tipos de Órdenes
 
@@ -322,95 +352,29 @@ ID incremental con sistema de historial. Las órdenes se guardan cronológicamen
 3. Se marca `executed: True` tras resolución
 4. Se elimina automáticamente cuando el historial FIFO alcanza su límite (default: 500 órdenes)
 
-### 7.5 GameState: Contenedor Central
+### 7.5 Sistema FIFO
 
-El GameState es la clase que encapsula los tres Hash Maps y gestiona el estado global del juego.
+`order_history` usa `deque(maxlen=500)`. Cuando se alcanza el límite, la orden más antigua se elimina automáticamente.
 
-**Componentes del GameState:**
-
-| Componente | Tipo | Descripción |
-|------------|------|-------------|
-| `mapa` | dict | Hash Map de hexágonos: `{(q, r): hex_data}` |
-| `unidades` | dict | Hash Map de unidades: `{unit_id: unit_data}` |
-| `ordenes` | dict | Hash Map de órdenes: `{order_id: order_data}` |
-| `next_unit_id` | int | Contador incremental para IDs de unidades |
-| `next_order_id` | int | Contador incremental para IDs de órdenes |
-| `order_history_ids` | deque | Cola FIFO para limpieza automática de órdenes antiguas |
-| `current_phase` | str | Fase actual: PLANNING, EXECUTION, o RESET |
-| `active_player` | int | Jugador activo: 0 o 1 |
-| `turn_number` | int | Número de turno actual |
-
-**Sistema FIFO para Órdenes:**
-
-El historial de órdenes usa `collections.deque` con `maxlen=500` (configurable). Cuando se alcanza el límite:
-1. La orden más antigua se elimina automáticamente del deque
-2. Se borra la entrada correspondiente en el Hash Map `ordenes`
-3. La nueva orden se añade al final del deque
-
-Esto garantiza que el juego nunca consumirá memoria ilimitada en partidas largas.
-
-### 7.6 Fases del Juego (Conceptual)
-
-El juego opera en tres fases secuenciales que se repiten cada turno:
+### 7.6 Fases del Juego
 
 **PLANNING → EXECUTION → RESET → PLANNING...**
 
-| Fase | Acción Principal | Estado de Órdenes |
-|------|------------------|-------------------|
-| **PLANNING** | Jugadores emiten órdenes | Se crean con `executed: False` |
-| **EXECUTION** | Motor resuelve movimientos y combates | Se marcan `executed: True` |
-| **RESET** | Limpieza post-turno, cambio de jugador | Se aplica Regla 5 Hexágonos |
-
-**Diferencias por Modelo de Distribución:**
-
-| Modelo | Flujo de Datos |
-|--------|----------------|
-| **MVP (local)** | UI → GameState directo. Ambos jugadores en mismo dispositivo |
-| **v2.0 (cloud)** | Cliente envía órdenes vía API → Servidor ejecuta EXECUTION → Devuelve estado actualizado |
-
-### 7.7 Ventajas de esta Arquitectura
-
-| Ventaja | Descripción |
-|---------|-------------|
-| **Acceso O(1)** | Búsqueda por ID o coordenada es instantánea (60 FPS garantizados) |
-| **Trazabilidad** | `executed: true` permite Modo Replay o Log de batalla |
-| **Seguridad de Memoria** | `deque(maxlen)` previene memory leaks en partidas largas |
-| **API-Ready** | Motor agnóstico al origen de órdenes (UI local o API remota) |
-| **Simplicidad WEGO** | Resolución itera solo `ordenes` del turno actual |
+| Fase | Acción | Órdenes |
+|------|--------|---------|
+| **PLANNING** | Jugadores emiten órdenes | `executed: False` |
+| **EXECUTION** | Resolución de movimientos y combates | `executed: True` |
+| **RESET** | Limpieza, cambio de jugador | Regla 5 Hexágonos |
 
 ---
 
 ## 8. Nota Técnica
 
-La lógica de negocio debe mantenerse completamente **agnóstica a la capa Flet**. Las decisiones de renderizado no impactan las reglas del juego.
+La lógica de negocio es agnóstica a la capa Flet.
 
 ### Comunicación Engine ↔ UI
 
-| Modelo | Dirección | Datos |
-|--------|-----------|-------|
-| **MVP (local)** | UI → Engine | Acceso directo a GameState |
-| **MVP (local)** | Engine → UI | Lectura directa de Hash Maps |
-| **v2.0 (cloud)** | Cliente → Servidor | Lista de órdenes del turno |
-| **v2.0 (cloud)** | Servidor → Cliente | Estado actualizado del mapa + eventos |
-
-### Contrato de Datos (API-Ready)
-
-**Request (Cliente → Servidor):**
-
-| Campo | Tipo | Descripción |
-|-------|------|-------------|
-| `player_id` | int | Identificador del jugador (0 o 1) |
-| `orders` | list | Lista de órdenes, cada una con: unit_id, tipo, coords |
-
-**Response (Servidor → Cliente):**
-
-| Campo | Tipo | Descripción |
-|-------|------|-------------|
-| `turn` | int | Número de turno tras resolución |
-| `mapa` | dict | Estado completo del mapa hexagonal |
-| `unidades` | dict | Estado completo de todas las unidades |
-| `events` | list | Lista de eventos ocurridos (movimientos, combates, eliminaciones) |
-
-### Principio de Diseño
-
-Esta estructura permite que el mismo motor lógico funcione sin modificaciones tanto en el MVP local como en el servidor cloud futuro. El motor recibe órdenes, las procesa, y devuelve estado — independiente de si el origen es una UI local o una API remota.
+| Dirección | Datos |
+|-----------|-------|
+| UI → Engine | Acceso directo a GameState |
+| Engine → UI | Eventos de cambio de estado |

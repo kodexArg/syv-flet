@@ -1,26 +1,26 @@
-GamePhase
-  PLANNING
-  EXECUTION
-  RESET
+class GamePhase(str, Enum):
+    PLANNING = "planning"
+    EXECUTION = "execution"
+    RESET = "reset"
 
-UnitType
-  INFANTRY
-  OFFICER
-  CAPTAIN
+class UnitType(str, Enum):
+    INFANTRY = "infantry"
+    OFFICER = "officer"
+    CAPTAIN = "captain"
 
-UnitStatus
-  ACTIVE
-  ROUTED
-  RETREAT
-  ELIMINATED
+class UnitStatus(str, Enum):
+    ACTIVE = "active"
+    ROUTED = "routed"
+    RETREAT = "retreat"
+    ELIMINATED = "eliminated"
 
-TerrainType
-  GRASS
-  WATER
+class TerrainType(str, Enum):
+    GRASS = "grass"
+    WATER = "water"
 
-OrderType
-  ATTACK
-  MOVE
-  DEPLOY
-  DEFEND
-  CANCEL
+class OrderType(str, Enum):
+    ATTACK = "attack"
+    MOVE = "move"
+    DEPLOY = "deploy"
+    DEFEND = "defend"
+    CANCEL = "cancel"

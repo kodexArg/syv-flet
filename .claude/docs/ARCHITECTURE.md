@@ -13,8 +13,8 @@ Complemento al [PRD.md](./PRD.md). Define la estructura de carpetas, separación
    - La UI es reemplazable sin tocar el motor
    - Dependencias fluyen hacia adentro: UI → Engine
 
-2. **Hash Maps como Single Source of Truth**
-   - Estado del juego vive en tres Hash Maps: `mapa`, `unidades`, `ordenes`
+2. **Hash Maps**
+   - Estado del juego vive en tres Hash Maps: `map`, `units`, `orders`
    - GameState es el contenedor central
    - Acceso directo O(1) para mantener 60 FPS
 
@@ -39,7 +39,7 @@ syv-flet/
 │   │
 │   ├── engine/                      ← Game logic (UI-agnostic)
 │   │   ├── __init__.py
-│   │   ├── game_state.py            ← GameState (Hash Maps: mapa, unidades, ordenes)
+│   │   ├── game_state.py            ← GameState (Hash Maps: map, units, orders)
 │   │   ├── board.py                 ← Hexagon grid operations (Q,R coords)
 │   │   ├── game_controller.py       ← FSM (PLANNING/EXECUTION/RESET phases)
 │   │   ├── tap_cycle.py             ← Tap cycling validation (stateless)
@@ -110,16 +110,22 @@ syv-flet/
 ### Layer 1: Engine (Agnostic to UI)
 
 **GameState (`engine/game_state.py`)**
-```
-Contiene los tres Hash Maps:
-  - mapa: {(q, r): hex_data}          # Topología fija del tablero
-  - unidades: {unit_id: unit_data}    # Estado de todas las unidades
-  - ordenes: {order_id: order_data}   # Órdenes con limpieza FIFO
+```python
+class GameState(BaseModel):
+    map: Dict[Tuple[int, int], HexData]
+    units: Dict[str, UnitData]
+    orders: Dict[str, OrderData]
 
-Gestiona:
-  - IDs incrementales (next_unit_id, next_order_id)
-  - Limpieza automática de órdenes antiguas (deque con maxlen)
-  - Estado global: current_phase, active_player, turn_number
+    current_phase: GamePhase
+    active_player: int
+    turn_number: int
+
+    selected_hex: Optional[Tuple[int, int]]
+    order_path: List[Tuple[int, int]]
+
+    next_unit_id: int
+    next_order_id: int
+    order_history: deque
 ```
 
 **Board (`engine/board.py`)**
@@ -130,10 +136,10 @@ Operaciones sobre coordenadas hexagonales:
   - distance(a, b) → int
   - get_unit_at(q, r) → unit_id | None
 
-Inicializa el Hash Map mapa con terrenos
+Inicializa el Hash Map map con terrenos
 ```
 
-**Game Controller (`engine/game_controller.py`)**
+**GameController (`engine/game_controller.py`)**
 ```
 FSM Phases:
   PLANNING    → Jugadores colocan órdenes
@@ -145,7 +151,7 @@ Responsabilidades:
   - Gestionar current_phase en GameState
   - Validar órdenes mediante tap_cycle
   - Ejecutar resolución de turno
-  - Actualizar Hash Maps atómicamente
+  - Actualizar Hash Maps
 ```
 
 **Tap Cycle (`engine/tap_cycle.py`)**
@@ -212,26 +218,21 @@ Flujo:
 
 ### 1. Hash Maps como Estructura Central
 
-**Decisión:** Estado del juego en tres Hash Maps directos (mapa, unidades, ordenes)
+**Decisión:** Estado del juego en tres Hash Maps directos (map, units, orders)
 
 **Razón:**
 - Acceso O(1) crítico para 60 FPS
-- Simplicidad sobre abstracción
-- Sincronización explícita entre estructuras
+- Simplicidad
 - Perfilado fácil de memory usage
 
-**Trade-off aceptado:** Menos abstracción que Repository Pattern, pero más directo y performante para MVP
+### 2. Pydantic para Estructuras de Datos
 
-### 2. Engine Agnóstico a Origen de Datos
-
-**Decisión:** GameController no sabe si GameState es local o remoto
+**Decisión:** Todos los modelos de datos usan Pydantic BaseModel
 
 **Razón:**
-- Permite evolución futura sin reescritura
-- En v2.0 cloud, GameState puede alimentarse desde API
-- Motor no cambia, solo cambia de dónde viene el estado
-
-**Nota:** Esto NO significa diseñar para futuro ahora. Simplemente evitamos acoplamientos innecesarios.
+- Validación automática
+- Type hints nativos
+- Serialización JSON directa
 
 ### 3. Configs en YAML
 
@@ -251,7 +252,7 @@ Flujo:
 
 ### Game FSM (PLANNING → EXECUTION → RESET)
 
-**Ubicación:** `GameController.current_phase` (atributo de GameState)
+**Ubicación:** `GameState.current_phase`
 
 **Transiciones:**
 ```
@@ -259,8 +260,6 @@ PLANNING   → Usuario coloca órdenes → "Next Turn" → EXECUTION
 EXECUTION  → Resolver turno → RESET
 RESET      → Limpieza, cambio jugador → PLANNING
 ```
-
-**Importante:** FSM es local en MVP. El motor ejecuta todo in-process.
 
 ### Tap Cycling Logic
 
@@ -272,7 +271,7 @@ validate_tap(hex_clicked, current_selection, board) → valid/invalid
 suggest_order(from_hex, to_hex) → OrderType | None
 ```
 
-**GameController** llama estas funciones antes de persistir órdenes en `GameState.ordenes`.
+**GameController** llama estas funciones antes de persistir órdenes en `GameState.orders`.
 
 Ver `cycle-tap-mechanism` skill para detalles completos.
 
@@ -341,9 +340,9 @@ ui:
 
 **Configuration & Tests:**
 - [ ] `configs.yaml` — Todos los valores hardcodeados
-- [ ] `tests/test_game_state.py` — Tests de Hash Maps + FIFO
+- [ ] `tests/test_game_state.py` — Tests de GameState + FIFO
 - [ ] `tests/test_board.py` — Tests de grid hexagonal
-- [ ] `tests/test_game_phases.py` — Tests de FSM
+- [ ] `tests/test_game_controller.py` — Tests de FSM
 - [ ] `tests/test_combat.py` — Tests de resolución de combate
 
 ---
