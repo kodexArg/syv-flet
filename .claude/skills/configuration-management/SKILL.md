@@ -20,59 +20,9 @@ All constants—board radius, hex size, movement distance, opacity values, color
 
 Located: `/home/kodex/Dev/syv-flet/configs.yaml`
 
-### Structure
+### Structure and Example
 
-```yaml
-# Game Rules
-board:
-  radius: 20                          # Board size: 3*R*(R+1) + 1 = 1,261 hexes
-
-rules:
-  movement:
-    max_move_distance: 3              # Max hexes a unit can move per order
-    max_support_distance: 5           # "Five-Hex Rule" — max distance to officer
-
-  combat:
-    tie_behavior: "static"            # Combat tie result: units remain static
-
-# UI/UX
-ui:
-  # Responsive hex sizes (pixels)
-  hex_sizes:
-    desktop_1920: 64
-    desktop_1280: 56
-    tablet: 48
-    mobile: 40
-
-  # Faction team colors
-  faction_colors:
-    player_1: "#2196F3"               # Blue
-    player_2: "#F44336"               # Red
-    neutral: "#CCCCCC"                # Gray
-
-  # Phase visibility (opacity 0.0-1.0)
-  phase_opacity:
-    planning: 0.4                     # Orders faint during planning
-    execution: 1.0                    # Orders fully visible during execution
-
-  # Button styling
-  buttons:
-    start_game_color: "#4CAF50"       # Green
-    cambiar_jugador_color: "#FF9800"  # Orange
-    border_radius: 50                 # Rounded (gomoso)
-
-# Assets
-assets:
-  hexagons_path: "assets/hexagons/Previews/"
-  icons_path: "assets/icons/PNG/"
-  fonts_path: "assets/fonts/kenney_kenney-fonts/"
-
-# Display/Performance
-display:
-  target_fps_desktop: 60
-  target_fps_mobile: 30
-  canvas_update_threshold_ms: 16      # Refresh every 16ms (60 FPS)
-```
+See [example-config.yaml](./example-config.yaml) in this directory for a complete reference of the keys and structure.
 
 ---
 
@@ -80,54 +30,26 @@ display:
 
 ### Method: `config_loader.py`
 
-```python
-# Location: src/syv_flet/utils/config_loader.py
+**Responsibility:**
+- Load the YAML file at startup.
+- Validate that all required keys exist (fail early if config is broken).
+- Return the configuration as a dictionary or a structured object.
 
-Module responsibility:
-  - Load YAML at startup
-  - Validate required keys
-  - Return as dict or TypedDict
-
-Example pseudocode:
-
-  load_config(path="configs.yaml"):
-    Read YAML file
-    Parse into Python dict
-    Validate all required keys exist
-    Return config dict
-
-  get_value(config, path):
-    Example: get_value(config, "board.radius") → 20
-    Split path by "."
-    Navigate nested dict
-    Return value or error if missing
-```
+**Pseudocode Logic:**
+1. Open and read `configs.yaml`.
+2. Parse YAML content safely.
+3. Check for essential keys (e.g., `board`, `rules`).
+4. Return the data structure.
 
 ---
 
-## Usage Pattern in Code
+## Usage Pattern
 
-### ✓ Correct
+### Correct Approach
+Import the loader anywhere you need configuration. Assign loaded values to local variables or class attributes during initialization.
 
-```python
-# In engine/board.py
-from utils.config_loader import load_config
-
-config = load_config()
-BOARD_RADIUS = config["board"]["radius"]
-
-class HexagonGrid:
-    def __init__(self):
-        self.radius = BOARD_RADIUS
-```
-
-### ✗ Wrong
-
-```python
-# NEVER do this
-class HexagonGrid:
-    RADIUS = 20  # ← Magic number! WRONG
-```
+### Avoid
+Do NOT define constants directly in classes (e.g., `RADIUS = 20`) or usage of "magic numbers" in logic. Code should be agnostic of the specific values.
 
 ---
 
@@ -145,73 +67,40 @@ class HexagonGrid:
 
 ## Workflow: Adding a New Configuration
 
-1. **Add to `configs.yaml`:**
-   ```yaml
-   my_new_feature:
-     param_name: value
-   ```
-
-2. **Load in Python:**
-   ```python
-   config = load_config()
-   param_value = config["my_new_feature"]["param_name"]
-   ```
-
-3. **Never hardcode** the param in source code.
+1. **Add to `configs.yaml`**: Define your new parameter and value in the YAML file.
+2. **Load in Application**: Retrieve the value using your config loader.
+3. **Use Variable**: Pass the value to where it is needed.
 
 ---
 
 ## Environment-Specific Configs (Future)
 
-For deployment environments (dev/staging/production):
+For deployment environments (dev/staging/production), the strategy is to:
+- Use environment variables to select the target config file (e.g., `configs.prod.yaml`).
+- Or load base config and override specific keys with environment variables.
 
-```bash
-# Option 1: Multiple YAML files
-configs.dev.yaml
-configs.prod.yaml
-
-# Option 2: Load + override from .env
-CONFIGS_FILE=configs.prod.yaml
-
-# Load in code:
-config_file = os.getenv("CONFIGS_FILE", "configs.yaml")
-config = load_config(config_file)
-```
-
-For MVP, use single `configs.yaml`.
+For MVP, use a single `configs.yaml`.
 
 ---
 
 ## Validation
 
-Optional: Use Pydantic to validate config structure at load time.
-
-```python
-from pydantic import BaseModel
-
-class BoardConfig(BaseModel):
-    radius: int
-    # Pydantic validates: radius is integer, in valid range, etc.
-
-config_obj = BoardConfig(**config["board"])
-```
+It is highly recommended to validate the configuration structure at load time (e.g., ensuring radii are positive integers, colors are hex strings) to prevent runtime errors.
 
 ---
 
 ## Version Control
 
-- ✓ **Commit `configs.yaml`** (it's a schema file, not secrets)
-- ✗ **Never commit `.env`** (contains sensitive data)
+- ✓ **Commit `configs.yaml`** (it serves as the schema and default values).
+- ✗ **Never commit `.env`** (contains sensitive data/secrets).
 
 ---
 
 ## Checklist
 
-- [ ] All numeric constants in `configs.yaml` (not .py files)
-- [ ] `config_loader.py` handles YAML parsing
-- [ ] At least one test loads config successfully
-- [ ] Documentation explains how to override values
-- [ ] No magic numbers remain in source code
+- [ ] All numeric constants in `configs.yaml`.
+- [ ] Config loader handles YAML parsing errors gracefully.
+- [ ] No magic numbers remain in source code.
 
 ---
 

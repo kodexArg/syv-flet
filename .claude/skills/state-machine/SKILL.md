@@ -1,194 +1,108 @@
 ---
 name: state-machine
-description: Game state machine architecture. Single FSM managing game phases, data structures using Pydantic.
-allowed-tools: Read, Grep
+description: strict vocabulary and logical contracts for the game's Finite State Machine. Defines the "WHAT" (names, patterns, states) without dictating the "HOW" (implementation details).
+allowed-tools: Read
 ---
 
 # Game State Machine Architecture
 
-## 1. High-Level Architecture
+## 1. Architectural Patterns
+
+The system MUST adhere to the following design patterns:
+
+| Pattern | Component | Implementation Rule |
+| :--- | :--- | :--- |
+| **Separation of Concerns** | `GameState` vs `GameController` | State holds data *only*. Controller handles logic/transitions. |
+| **Singleton (Logical)** | `GameState` | There is only ONE source of truth for the game state at any time. |
+| **Immutable Snapshots** | `GamePhase` transitions | Phase changes are atomic. State is consistent before/after transition. |
+| **Observer** | UI Components | UI *reacts* to state changes. UI never modifies state directly. |
+| **Command Pattern** | `OrderData` | Orders are data objects reified before execution. |
+
+## 2. Strict Vocabulary
+
+Use these **EXACT** names for classes, variables, and enums. Do not deviate.
+
+### Core Classes
+*   `class GameState(BaseModel)`: The root state container.
+*   `class GameController`: The logic handler and state mutator.
+
+### Enums & Constants
+*   `class GamePhase(str, Enum)`:
+    *   `PLANNING`: Players place hidden orders.
+    *   `EXECUTION`: Orders resolve simultaneously.
+    *   `RESET`: Cleanup and turn rollover.
+*   `class ScreenState(str, Enum)`:
+    *   `PHASE_TRANSITION`: Privacy screen (blocking overlay).
+    *   `GAMEPLAY`: Interactive grid view.
+
+### Critical Variables (in GameState)
+| Variable | Type | Purpose |
+| :--- | :--- | :--- |
+| `current_phase` | `GamePhase` | Tracks the high-level game flow. |
+| `screen_state` | `ScreenState` | Controls what screen/overlay is rendered. |
+| `active_player` | `int` | `0` or `1`. Whos turn is it locally (in hotseat). |
+| `map` | `Dict` | Stores `HexData` keyed by `(q, r)`. |
+| `units` | `Dict` | Stores `UnitData` keyed by `unit_id`. |
+| `orders` | `Dict` | Stores `OrderData` keyed by `order_id`. |
+
+## 3. Behavioral Contracts
+
+### Controller Logic (`GameController`)
+
+The controller must implement these logical flows. Code structure is free, but the *sequence* is mandatory.
+
+#### `handle_click(q, r)`
+*   **Contract:** Route clicks based on `current_phase`.
+*   **Logic:**
+    1.  IF `current_phase` != `PLANNING`: Ignore input.
+    2.  IF click is valid (see cycle-tap-mechanism skill): Update `selected_hex` or `orders`.
+
+#### `advance_phase()`
+*   **Contract:** Move the FSM forward.
+*   **Sequence:**
+    1.  `PLANNING` -> `EXECUTION`: Trigger order resolution.
+    2.  `EXECUTION` -> `RESET`: Trigger cleanup.
+    3.  `RESET` -> `PLANNING`: Trigger player switch (incr `turn_number`, toggle `active_player`).
+
+### Data Models (Schema Contracts)
+
+*   `HexData`: Must contain `terrain`, `occupant_id`.
+*   `UnitData`: Must contain `owner`, `unit_type`, `position`, `status`.
+*   `OrderData`: Must contain `order_type`, `coords` (target/path), `executed` (bool).
+
+## 4. FSM Flow & Privacy Rules
+
+The state machine dictates **Visibility**.
 
 ```mermaid
 graph TD
-    UI[Flet UI] -->|Interactions| Controller[GameController]
-    Controller -->|Manages| State[GameState]
-
-    subgraph GameState
-        Map[map: Dict]
-        Units[units: Dict]
-        Orders[orders: Dict]
-        FSM[current_phase: GamePhase]
+    Start((Start)) --> TransitionScreen
+    
+    subgraph "Hotseat Loop"
+        TransitionScreen[Screen: PHASE_TRANSITION] -->|Btn: 'Start/Next'| Planning[Phase: PLANNING]
+        Planning -->|Btn: 'End Turn'| Check{Both Done?}
+        Check -->|No| TransitionScreen
+        Check -->|Yes| Execution[Phase: EXECUTION]
+        Execution -->|Auto/Anim| Reset[Phase: RESET]
+        Reset -->|Auto| TransitionScreen
     end
 ```
 
-## 2. GameState (Pydantic)
+### Visibility Matrix
 
-```python
-from pydantic import BaseModel, Field
-from typing import Dict, Tuple, Optional, List
-from collections import deque
-from enum import Enum
+| Context | `current_phase` | `screen_state` | Variable Visibility |
+| :--- | :--- | :--- | :--- |
+| **Waiting P1** | `PLANNING` | `PHASE_TRANSITION` | **None** (Overlay covers all). |
+| **P1 Turn** | `PLANNING` | `GAMEPLAY` | **P1 Specific**: See P1 units/orders. P2 orders HIDDEN. |
+| **Waiting P2** | `PLANNING` | `PHASE_TRANSITION` | **None** (Overlay covers all). |
+| **P2 Turn** | `PLANNING` | `GAMEPLAY` | **P2 Specific**: See P2 units/orders. P1 orders HIDDEN. |
+| **Cinema** | `EXECUTION` | `GAMEPLAY` | **Public**: ALL units and ALL orders visible to everyone. |
 
-class GamePhase(str, Enum):
-    PLANNING = "planning"
-    EXECUTION = "execution"
-    RESET = "reset"
+## 5. State Changes & Events
 
-class GameState(BaseModel):
-    map: Dict[Tuple[int, int], HexData] = Field(default_factory=dict)
-    units: Dict[str, UnitData] = Field(default_factory=dict)
-    orders: Dict[str, OrderData] = Field(default_factory=dict)
+To maintain the Observer pattern, distinct events should be implicit or explicit:
 
-    current_phase: GamePhase = GamePhase.PLANNING
-    active_player: int = 0
-    turn_number: int = 0
+1.  **Selection Change:** Updates `selected_hex`. UI MUST re-render grid highlights.
+2.  **Order Placed:** Updates `orders` dict. UI MUST render the order icon/path.
+3.  **Phase Change:** Updates `current_phase` + `screen_state`. UI MUST switch main view (Grid <-> Overlay).
 
-    selected_hex: Optional[Tuple[int, int]] = None
-    order_path: List[Tuple[int, int]] = Field(default_factory=list)
-
-    next_unit_id: int = 0
-    next_order_id: int = 0
-    order_history: deque = Field(default_factory=lambda: deque(maxlen=500))
-```
-
-## 3. Data Structures
-
-### HexData
-
-```python
-class TerrainType(str, Enum):
-    GRASS = "grass"
-    WATER = "water"
-
-class HexData(BaseModel):
-    terrain: TerrainType = TerrainType.GRASS
-    occupant_id: Optional[str] = None
-    last_order_id: Optional[str] = None
-    attributes: Dict[str, Any] = Field(default_factory=dict)
-```
-
-### UnitData
-
-```python
-class UnitType(str, Enum):
-    INFANTRY = "infantry"
-    OFFICER = "officer"
-    CAPTAIN = "captain"
-
-class UnitStatus(str, Enum):
-    ACTIVE = "active"
-    ROUTED = "routed"
-    RETREAT = "retreat"
-    ELIMINATED = "eliminated"
-
-class UnitData(BaseModel):
-    owner: int
-    unit_type: UnitType
-    position: Tuple[int, int]
-    status: UnitStatus = UnitStatus.ACTIVE
-```
-
-### OrderData
-
-```python
-class OrderType(str, Enum):
-    ATTACK = "attack"
-    MOVE = "move"
-    DEPLOY = "deploy"
-    DEFEND = "defend"
-    CANCEL = "cancel"
-
-class OrderData(BaseModel):
-    unit_id: str
-    order_type: OrderType
-    coords: Tuple[int, int] | Tuple[int, int, int, int]
-    turn: int
-    executed: bool = False
-```
-
-## 4. GameController
-
-```python
-class GameController:
-    def __init__(self, state: GameState):
-        self.state = state
-
-    def handle_click(self, q: int, r: int) -> None:
-        if self.state.current_phase != GamePhase.PLANNING:
-            return
-
-        if self.state.selected_hex is None:
-            self._try_select_origin(q, r)
-        elif (q, r) == self.state.selected_hex:
-            self._cycle_origin()
-        elif self._is_adjacent(self.state.selected_hex, (q, r)):
-            self._handle_adjacent_tap(q, r)
-
-    def advance_phase(self) -> None:
-        match self.state.current_phase:
-            case GamePhase.PLANNING:
-                self.state.current_phase = GamePhase.EXECUTION
-                self._resolve_orders()
-            case GamePhase.EXECUTION:
-                self.state.current_phase = GamePhase.RESET
-                self._cleanup()
-            case GamePhase.RESET:
-                self.state.current_phase = GamePhase.PLANNING
-                self._switch_player()
-```
-
-## 5. FSM Phases
-
-```
-┌─────────────┐       ┌─────────────┐       ┌─────────────┐
-│  PLANNING   │ ───>  │ EXECUTION   │ ───>  │   RESET     │
-└─────────────┘       └─────────────┘       └─────────────┘
-      ↑                                            │
-      └────────────────────────────────────────────┘
-```
-
-| Phase | Input | Orders | Action |
-|-------|-------|--------|--------|
-| PLANNING | Enabled | `executed: False` | Players place orders via tap cycling |
-| EXECUTION | Disabled | `executed: True` | Resolve movements and combat |
-| RESET | Disabled | FIFO cleanup | Apply 5-Hex Rule, switch player |
-
-## 6. Selection State
-
-Selection tracking is simple state in `GameState`:
-
-```python
-# Select origin
-state.selected_hex = (q, r)
-
-# Build order path
-state.order_path = [(q1, r1), (q2, r2)]
-
-# Clear selection
-state.selected_hex = None
-state.order_path.clear()
-```
-
-## 7. Observability
-
-Events emitted on state changes:
-
-```python
-class GameEvent(BaseModel):
-    event_type: str
-    affected: List[Tuple[int, int] | str]
-    old_value: Any = None
-    new_value: Any = None
-    timestamp: float
-```
-
-UI subscribes and re-renders on events.
-
-## 8. Extending GameState
-
-Future features use `HexData.attributes`:
-
-```python
-state.map[(q, r)].attributes["burning"] = True
-state.map[(q, r)].attributes["elevation"] = 5
-```

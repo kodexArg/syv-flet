@@ -112,91 +112,83 @@ def distance(a, b):
 ---
 
 ## 4. Pixel-Space Geometry
+    
+### 4.1. Orientation: Flat-Top
 
-To render the grid and convert mouse clicks to hexagonal coordinates, we need to map between pixels and logical coordinates.
-
-### 4.1. Orientation Model
-
-SyV-Flet uses **flat-top hexagons** (flat-top orientation):
+SyV-Flet strictly uses **Flat-Top** orientation.
 
 ```
-      +----+
-     /      \
-    /        \
-   |          |
-    \        /
-     +----+
+      Score
+      ╱   ╲
+    ╱       ╲
+   │  (q,r)  │
+    ╲       ╱
+      ╲   ╱
 ```
 
-(Alternative: pointy-top orientation requires different formulas.)
+**Dimensions:**
+*   **Size (`s`):** Distance from center to any vertex.
+*   **Width:** `2 * size` (Max width, vertex to vertex).
+*   **Height:** `sqrt(3) * size` (Max height, flat side to flat side).
+*   **Horiz. Spacing:** `3/2 * size` (Distance between columns).
+*   **Vert. Spacing:** `sqrt(3) * size` (Distance between rows).
 
-### 4.2. Pixel → Logical Coordinates Conversion
+### 4.2. Hex to Pixel (Forward)
 
-Given:
-- Hexagon size: `size` (distance from center to vertex, typically 30-50 pixels)
-- Hexagon center `(0, 0)` in pixels: `(center_x, center_y)`
-
-**Formula (flat-top):**
+Convert logical axial coordinates `(q, r)` to screen pixel `(x, y)`.
 
 ```python
-def pixel_to_hex(px, py, size, center_x, center_y):
+import math
+
+def hex_to_pixel(q: int, r: int, size: float) -> tuple[float, float]:
     """
-    Convert pixel coordinates to (q, r).
-
-    Assumes flat-top hexagons.
-    """
-    # Offset relative to center
-    x = px - center_x
-    y = py - center_y
-
-    # Change of basis: from pixels to cubic
-    # (These formulas assume specific size and spacing)
-    q = (x * 2/3) / size
-    r = (-x / 3 + y * 0.5 / size)
-    s = -q - r
-
-    # Cubic rounding to nearest hexagon
-    q, r, s = round_hex(q, r, s)
-
-    return (int(q), int(r))
-
-def round_hex(q, r, s):
-    """
-    Round fractional cubic coordinates to nearest hexagon.
-
-    Correctly handles the q + r + s = 0 invariant.
-    """
-    rq = round(q)
-    rr = round(r)
-    rs = round(s)
-
-    q_diff = abs(rq - q)
-    r_diff = abs(rr - r)
-    s_diff = abs(rs - s)
-
-    if q_diff > r_diff and q_diff > s_diff:
-        rq = -rr - rs
-    elif r_diff > s_diff:
-        rr = -rq - rs
-    else:
-        rs = -rq - rr
-
-    return (rq, rr, rs)
-```
-
-### 4.3. Logical Coordinates → Pixels Conversion
-
-Inverse of the above:
-
-```python
-def hex_to_pixel(q, r, size, center_x, center_y):
-    """
-    Convert (q, r) to pixels.
+    Flat-Top Orientation.
+    x points right, y points down.
     """
     x = size * (3/2 * q)
-    y = size * (0.5 * q + r)
+    y = size * (math.sqrt(3)/2 * q + math.sqrt(3) * r)
+    return x, y
+```
 
-    return (center_x + x, center_y + y)
+### 4.3. Pixel to Hex (Inverse)
+
+Convert screen pixel `(x, y)` to fractional axial coordinates.
+
+```python
+def pixel_to_hex(x: float, y: float, size: float) -> tuple[float, float]:
+    """
+    Inverse of hex_to_pixel.
+    Returns fractional (q, r) which must be rounded.
+    """
+    q = (2/3 * x) / size
+    r = (-1/3 * x + math.sqrt(3)/3 * y) / size
+    return q, r
+```
+
+### 4.4. Rounding
+
+To get the nearest integer hex, convert fractional `(q, r)` to cubic `(q, r, s)`, round all three, and reset the one with the largest change to satisfy `q+r+s=0`.
+
+```python
+def round_hex(frac_q: float, frac_r: float) -> tuple[int, int]:
+    frac_s = -frac_q - frac_r
+    
+    q = round(frac_q)
+    r = round(frac_r)
+    s = round(frac_s)
+    
+    q_diff = abs(q - frac_q)
+    r_diff = abs(r - frac_r)
+    s_diff = abs(s - frac_s)
+    
+    if q_diff > r_diff and q_diff > s_diff:
+        q = -r - s
+    elif r_diff > s_diff:
+        r = -q - s
+    else:
+        s = -q - r
+        
+    return q, r
 ```
 
 ---

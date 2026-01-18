@@ -53,10 +53,17 @@ La arquitectura de datos está diseñada para soportar ambos modelos sin refacto
 ## 3. Mecánica de Juego
 
 ### Sistema de Coordenadas
-* **Modelo:** Coordenadas cúbicas `(q, r, s)` donde `q + r + s = 0`, proyectadas a coordenadas axiales `(q, r)` para optimización de memoria (ver [ARCHITECTURE.md](./ARCHITECTURE.md) para detalles técnicos)
-* **Tablero:** Radio R=20 (fórmula: `3*R*(R+1) + 1` = 1,261 hexágonos)
-* **Adyacencia:** 6 vecinos inmediatos calculados mediante vectores de dirección constantes
-* **Distancia:** Manhattan hexagonal: `dist(a, b) = (|a.q - b.q| + |a.q + a.r - b.q - b.r| + |a.r - b.r|) / 2`
+* **Modelo:** Coordenadas cúbicas `(q, r, s)` donde `q + r + s = 0`.
+* **Proyección:** Axial `(q, r)` optimizada para memoria.
+* **Orientación:** **Flat-Top** (lado plano arriba).
+    ```
+          ╱──╲
+         │ q,r  │
+          ╲──╱
+    ```
+* **Tablero:** Radio R=20 (fórmula: `3*R*(R+1) + 1` = 1,261 hexágonos).
+* **Adyacencia:** 6 vecinos (Direcciones fijas relativas a ejes Flat-Top).
+* **Distancia:** Manhattan hexagonal: `(|q1-q2| + |r1-r2| + |s1-s2|) / 2`.
 
 ### Entidades Base
 * **Unidades:** Infantry, Officer, Captain
@@ -88,8 +95,29 @@ La UI encarna **minimalismo radical basado en intentionalidad**. No hay elemento
 * **Foco en lo Essential:** El mapa hexagonal es 95% de la pantalla
 * **Feedback Implícito:** Interactividad mediante cambios sutiles (hover, transiciones)
 
-### 4.2 Arquitectura Visual
+### 4.2 Arquitectura Visual (Hot-Seat con Privacidad)
 
+**Dos pantallas principales:**
+
+**1. Phase Transition Screen** (Barrera de privacidad + Anunciador de fases)
+```
+┌─────────────────────────────────────┐
+│                                     │
+│     Dark overlay (0.95 opacity)     │
+│                                     │
+│        [Centered Button]            │
+│   "Iniciar Partida" /               │
+│   "Siguiente Jugador" /             │
+│   "Nuevo Turno"                     │
+│                                     │
+└─────────────────────────────────────┘
+```
+Aparece en:
+- Inicio del juego ("Iniciar Partida")
+- Entre turnos de orden ("Siguiente Jugador")
+- Después de RESET ("Nuevo Turno")
+
+**2. Game Screen** (Juego activo)
 ```
 ┌─────────────────────────────────────┐
 │     GRILLA HEXAGONAL (95%)          │
@@ -101,23 +129,32 @@ La UI encarna **minimalismo radical basado en intentionalidad**. No hay elemento
 │                                     │
 │     [Scrolleable + Zoomeable]       │
 └─────────────────────────────────────┘
-  [Start Game] [Next Turn]  (2 buttons)
+  [Siguiente Jugador]  (1 button)
 ```
+**En fase PLANNING (privada):**
+- Solo unidades + órdenes del jugador activo visible
+- Unidades del adversario ocultas
+- Dark overlay opcional (oscurece adversarios)
+
+**En fase EXECUTION (compartida):**
+- Todas las órdenes de ambos jugadores visibles
+- Resolución simultánea mostrada en tiempo real
+- Sin botones (auto-ejecución)
 
 **Capas Flet:**
 1. **Canvas Static:** Grid hexagonal (dibujado una vez)
-2. **Canvas Dynamic:** Unidades y efectos de combate
-3. **GestureDetector:** Input de coordenadas + órdenes
-4. **UI Overlay:** Botones (Start, Next Turn)
+2. **Canvas Dynamic:** Unidades y efectos de combate (filtrado por phase+player)
+3. **GestureDetector:** Input de coordenadas + órdenes (solo si active_player match)
+4. **UI Overlay:** Botón único reutilizable (Phase Transition o Siguiente Jugador)
 
 ### 4.3 Elementos Visuales
 
 #### Terreno (Hexagons)
-- **Default:** `grass.png` (Kenney Hexagon Kit - Previews)
-- **Impasable:** `water.png`
-- **Futuro:** Variantes (sand, mountain, snow)
-- **Resolución:** 64x64 px (escalable)
-- **Ubicación:** `assets/hexagons/Previews/`
+- **Orientación:** **Flat-Top** (Fixed).
+- **Default:** `grass.png` (Kenney Hexagon Kit - Previews).
+- **Impasable:** `water.png`.
+- **Resolución:** 64x64 px (Source), renderizado dinámico.
+- **Ubicación:** `assets/hexagons/Previews/`.
 
 #### Iconografía (Board Icons)
 - **Biblioteca:** Kenney Board Game Icons (PNG)
@@ -132,23 +169,36 @@ La UI encarna **minimalismo radical basado en intentionalidad**. No hay elemento
 
 ### 4.4 Controles de Usuario
 
-#### Botón "Start Game"
-- **Estilo:** Redondo, gomoso (border-radius 50%, shadow suave)
-- **Color:** Accent color TBD
-- **Posición:** Centro de pantalla (pantalla de inicio)
-- **Acción:** Navega a GameScreen
+#### Botón Único Reutilizable (Phase Transition)
+**Ubicación:** `PhaseTransitionScreen` (pantalla oscura, centro)
+- **Estilo:** Redondo/almohada (border-radius 50%, shadow suave, cushioned)
+- **Color:** Accent color (consistent across all states)
+- **Estados de Texto:**
+  - "Iniciar Partida" (game start)
+  - "Siguiente Jugador" (between PLANNING turns)
+  - "Nuevo Turno" (after RESET cleanup)
+- **Acción:** Transiciona entre fases (PLANNING P1 → PLANNING P2 → EXECUTION → RESET)
+- **Comportamiento:** El botón es la ÚNICA forma de progresar entre fases. Crea barrera de privacidad.
 
-#### Botón "Next Turn"
-- **Estilo:** Idéntico a Start Game, pero secundario
-- **Posición:** Esquina inferior (fixed)
-- **Visibilidad:** Solo post-orden (invisible por defecto)
-- **Acción:** Ejecuta turn logic y cambia de jugador
+#### Botón "Siguiente Jugador" en GameScreen
+**Ubicación:** Durante fase PLANNING
+- **Estilo:** Idéntico al botón de Phase Transition
+- **Posición:** Esquina inferior o centro (fixed)
+- **Visibilidad:** Solo visible durante PLANNING (oculto en EXECUTION)
+- **Acción:** Termina turno del jugador activo → muestra Phase Transition Screen
 
-#### Interactividad de Nodos
-- **Click en Hex:** Selecciona unidad / muestra opciones
+#### Interactividad de Nodos (Durante PLANNING)
+- **Click en Hex:** Selecciona unidad propia / muestra opciones
 - **Hover en Arista:** Resalta posible orden
 - **Drag/Click Confirmación:** Ejecuta orden (pre-visualización)
 - **Visual Feedback:** Cambio de opacidad + tono
+- **Restricción:** Solo interactivo si `active_player == actual_player` (orden de turnos)
+
+#### Privacidad Visual (PLANNING only)
+- **Unidades adversarias:** No renderizadas en Canvas (ocultas completamente)
+- **Órdenes adversarias:** No renderizadas en Canvas
+- **Terreno:** Completamente visible (mapa base sin filtro)
+- **Implicación:** GameState contiene todo; rendering está filtrado por phase+player
 
 ### 4.5 Input y Coordenadas
 
@@ -228,10 +278,13 @@ Retrieved from https://kenney.nl/assets
 
 1. ✓ Tablero generado correctamente (radio 20, sin islas inalcanzables)
 2. ✓ Click→Coordenadas funcional en todas las resoluciones
-3. ✓ Interfaz secuencial de órdenes (J1 → J2)
-4. ✓ Resolución automática de movimiento y combates
+3. ✓ **Interfaz secuencial privada de órdenes** (J1 ordena sin ver J2 → J2 ordena sin ver J1)
+   - Phase Transition Screen oscurece el mapa entre turnos
+   - Cada jugador ve SOLO sus propias unidades y órdenes durante PLANNING
+   - Botón único "Siguiente Jugador" gate-keeps transición entre jugadores
+4. ✓ Resolución simultánea compartida (EXECUTION: ambos ven todas las órdenes ejecutarse)
 5. ✓ Empates resultan en ambas unidades estáticas (sin cambio)
-6. ✓ Limpieza post-turno (Regla 5 Hexágonos)
+6. ✓ Limpieza post-turno (Regla 5 Hexágonos) con Phase Transition "Nuevo Turno"
 
 ### Funcionalidad NO Incluida
 
@@ -250,21 +303,31 @@ Retrieved from https://kenney.nl/assets
 
 ```python
 class GameState(BaseModel):
+    # Core game state
     map: Dict[Tuple[int, int], HexData]
     units: Dict[str, UnitData]
     orders: Dict[str, OrderData]
 
-    current_phase: GamePhase
-    active_player: int
+    # Phase management
+    current_phase: GamePhase          # PLANNING, EXECUTION, RESET
+    screen_state: ScreenState         # PHASE_TRANSITION, GAMEPLAY
+    active_player: int                # 0 or 1 (whose turn is it?)
     turn_number: int
 
+    # UI state (ephemeral)
     selected_hex: Optional[Tuple[int, int]]
     order_path: List[Tuple[int, int]]
+    phase_transition_text: str        # "Iniciar Partida", "Siguiente Jugador", "Nuevo Turno"
 
+    # Counters
     next_unit_id: int
     next_order_id: int
-    order_history: deque
+    order_history: deque              # Max 500 orders (FIFO)
 ```
+
+**ScreenState Enum:**
+- `PHASE_TRANSITION`: Muestra pantalla oscura con botón (barrera de privacidad)
+- `GAMEPLAY`: Muestra Game Screen con grid (orden colocada o ejecución)
 
 ### 7.2 Mapa Hexagonal
 
@@ -358,13 +421,23 @@ class OrderData(BaseModel):
 
 ### 7.6 Fases del Juego
 
-**PLANNING → EXECUTION → RESET → PLANNING...**
+**PLANNING (P1 - PRIVATE) → PLANNING (P2 - PRIVATE) → EXECUTION (SHARED) → RESET (SILENT) → repeat**
 
-| Fase | Acción | Órdenes |
-|------|--------|---------|
-| **PLANNING** | Jugadores emiten órdenes | `executed: False` |
-| **EXECUTION** | Resolución de movimientos y combates | `executed: True` |
-| **RESET** | Limpieza, cambio de jugador | Regla 5 Hexágonos |
+| Fase | Acción | Visibilidad | Órdenes |
+|------|--------|-------------|---------|
+| **PLANNING (P1)** | J1 emite órdenes | PRIVATE: Solo J1 ve sus unidades+órdenes | `executed: False` |
+| | | J2 unidades/órdenes OCULTAS | |
+| | | Gate: "Siguiente Jugador" button | |
+| **PLANNING (P2)** | J2 emite órdenes | PRIVATE: Solo J2 ve sus unidades+órdenes | `executed: False` |
+| | | J1 unidades/órdenes OCULTAS | |
+| | | Gate: "Siguiente Jugador" button | |
+| **EXECUTION** | Resolución simultánea | SHARED: Ambos ven TODAS órdenes | `executed: True` |
+| | Movimientos + Combates | Visualización en tiempo real | |
+| | Auto-ejecución | Sin botones, transición automática | |
+| **RESET** | Limpieza silenciosa | HIDDEN: Regla 5 Hexágonos | (interno) |
+| | | Gate: "Nuevo Turno" button aparece | |
+
+**Nota Importante:** GameState contiene el estado completo del juego (todas las unidades, órdenes de ambos jugadores). La privacidad es **visual solamente** — el rendering de Canvas filtra qué se muestra basado en `current_phase` y `active_player`.
 
 ---
 

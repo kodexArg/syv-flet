@@ -52,14 +52,14 @@ syv-flet/
 │   │   │
 │   │   ├── screens/
 │   │   │   ├── __init__.py
-│   │   │   ├── menu_screen.py       ← Main menu (Start Game button)
-│   │   │   └── game_screen.py       ← Game view (grid + buttons)
+│   │   │   ├── phase_transition_screen.py ← PRIVATE gate + phase announcer (NEW)
+│   │   │   └── game_screen.py       ← Game view (grid + buttons, privacy filtered)
 │   │   │
 │   │   ├── components/
 │   │   │   ├── __init__.py
-│   │   │   ├── hex_grid.py          ← Canvas rendering + click detection
-│   │   │   ├── order_overlay.py     ← Order icons & highlights
-│   │   │   └── button_bar.py        ← "Cambiar Jugador" button
+│   │   │   ├── hex_grid.py          ← Canvas rendering + click detection (player-filtered)
+│   │   │   ├── order_overlay.py     ← Order icons & highlights (privacy-aware)
+│   │   │   └── phase_button.py      ← Reusable button (Iniciar/Siguiente/Nuevo)
 │   │   │
 │   │   ├── controllers/
 │   │   │   ├── __init__.py
@@ -112,21 +112,31 @@ syv-flet/
 **GameState (`engine/game_state.py`)**
 ```python
 class GameState(BaseModel):
+    # Core game state
     map: Dict[Tuple[int, int], HexData]
     units: Dict[str, UnitData]
     orders: Dict[str, OrderData]
 
-    current_phase: GamePhase
-    active_player: int
+    # Phase & screen management
+    current_phase: GamePhase           # PLANNING, EXECUTION, RESET
+    screen_state: ScreenState          # PHASE_TRANSITION, GAMEPLAY
+    active_player: int                 # 0 or 1 (whose turn?)
     turn_number: int
+    phase_transition_text: str         # Dynamic button text
 
+    # UI state (ephemeral)
     selected_hex: Optional[Tuple[int, int]]
     order_path: List[Tuple[int, int]]
 
+    # Counters
     next_unit_id: int
     next_order_id: int
-    order_history: deque
+    order_history: deque(maxlen=500)
 ```
+
+**ScreenState values:**
+- `PHASE_TRANSITION`: Show dark overlay with centered button (privacy gate)
+- `GAMEPLAY`: Show Game Screen with grid (order placement or execution)
 
 **Board (`engine/board.py`)**
 ```
@@ -184,10 +194,28 @@ Flujo:
 ```
 
 **Screen Components**
-- Menu: Botón "Start Game" estático
-- Game: Grid + botones, layout responsivo
-- Hex Grid: Canvas rendering + conversión click→hex
-- Order Overlay: Iconos y outlines sobre hexágonos
+- **PhaseTransitionScreen:** Dark overlay (0.95 opacity) + centered reusable button
+  - Shows when `screen_state == PHASE_TRANSITION`
+  - Dynamic button text: "Iniciar Partida", "Siguiente Jugador", "Nuevo Turno"
+  - **Critical for privacy:** Prevents seeing opponent's orders
+  - Appears: game start, between PLANNING turns, after RESET
+
+- **GameScreen:** Grid + buttons, layout responsivo
+  - Shows when `screen_state == GAMEPLAY`
+  - In PLANNING: filters rendering based on `active_player` (privacy visual layer)
+  - In EXECUTION: all units/orders visible (simultaneous resolution)
+
+- **HexGrid:** Canvas rendering + conversión click→hex
+  - **Privacy-aware:** Only renders units/orders matching active_player during PLANNING
+  - Terrain (grass/water) always visible
+  - Input handling respects `active_player` restriction
+
+- **OrderOverlay:** Iconos y outlines sobre hexágonos
+  - Privacy-aware: Only shows icons for active player during PLANNING
+
+- **PhaseButton:** Reusable button component
+  - Takes text prop: button label (dynamic per screen state)
+  - Consistent styling: pill-shaped, cushioned shadow
 
 ---
 
@@ -250,16 +278,42 @@ Flujo:
 
 ## State Machine (FSM y Tap Cycling)
 
-### Game FSM (PLANNING → EXECUTION → RESET)
+### Game FSM (PLANNING[P1-PRIVATE] → PLANNING[P2-PRIVATE] → EXECUTION[SHARED] → RESET)
 
-**Ubicación:** `GameState.current_phase`
+**Ubicación:** `GameState.current_phase` (game phase) + `GameState.screen_state` (UI display)
 
-**Transiciones:**
+**Transiciones Completas (incluyendo screen_state):**
 ```
-PLANNING   → Usuario coloca órdenes → "Next Turn" → EXECUTION
-EXECUTION  → Resolver turno → RESET
-RESET      → Limpieza, cambio jugador → PLANNING
+GAME START:
+  screen_state = PHASE_TRANSITION, phase_transition_text = "Iniciar Partida"
+  ↓ button click
+  current_phase = PLANNING, active_player = 0
+  screen_state = GAMEPLAY
+  ↓ P1 clicks "Siguiente Jugador"
+  screen_state = PHASE_TRANSITION, phase_transition_text = "Siguiente Jugador"
+  ↓ button click
+  current_phase = PLANNING, active_player = 1
+  screen_state = GAMEPLAY
+  ↓ P2 clicks "Siguiente Jugador"
+  screen_state = PHASE_TRANSITION (both done?)
+  ↓ auto-transition or button click
+  current_phase = EXECUTION
+  screen_state = GAMEPLAY
+  ↓ execution completes
+  current_phase = RESET (cleanup silent)
+  ↓ cleanup done
+  screen_state = PHASE_TRANSITION, phase_transition_text = "Nuevo Turno"
+  ↓ button click
+  current_phase = PLANNING, active_player = 0
+  screen_state = GAMEPLAY
+  [repeat]
 ```
+
+**GameController maneja:**
+- Validación de órdenes (tap_cycle)
+- Ejecución de combate (combat resolution)
+- Limpieza post-turno (Regla 5 Hexágonos)
+- **NO maneja transiciones UI** — eso es responsabilidad de GameUIController
 
 ### Tap Cycling Logic
 
@@ -332,11 +386,12 @@ ui:
 - [ ] `engine/combat.py` — Resolución de combate determinista
 
 **UI (Flet Interface):**
-- [ ] `ui/screens/menu_screen.py` — Pantalla de inicio
-- [ ] `ui/screens/game_screen.py` — Vista principal del juego
-- [ ] `ui/components/hex_grid.py` — Renderizado canvas + detección de clicks
-- [ ] `ui/components/order_overlay.py` — Iconos de órdenes sobre hexágonos
-- [ ] `ui/controllers/game_ui_controller.py` — Puente UI ↔ Engine
+- [ ] `ui/screens/phase_transition_screen.py` — **NEW** Dark overlay + button (privacy gate)
+- [ ] `ui/screens/game_screen.py` — Vista principal del juego (privacy-filtered rendering)
+- [ ] `ui/components/phase_button.py` — **NEW** Reusable button (Iniciar/Siguiente/Nuevo)
+- [ ] `ui/components/hex_grid.py` — Renderizado canvas + detección de clicks (player-filtered)
+- [ ] `ui/components/order_overlay.py` — Iconos de órdenes sobre hexágonos (privacy-aware)
+- [ ] `ui/controllers/game_ui_controller.py` — Puente UI ↔ Engine (maneja screen_state)
 
 **Configuration & Tests:**
 - [ ] `configs.yaml` — Todos los valores hardcodeados

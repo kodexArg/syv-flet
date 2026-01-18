@@ -6,88 +6,36 @@ allowed-tools: None
 
 # User Authentication Strategy
 
-**Current Status (MVP):** NOT IMPLEMENTED
+## Current Status: NONE
 
----
+There is **NO** user authentication system in SyV-Flet. No logins, no passwords, no sessions, no database of users.
 
-## MVP Scope: Hot-Seat Multiplayer
+## The Solution: Hot-Seat Transitions (Why we don't need Auth)
 
-The SyV-Flet MVP supports **local multiplayer only** (hot-seat):
+Since the game operates on a single device with two players (Hot-Seat), we solve "identity" and "secrecy" through **UI State Transitions** rather than cryptographic authentication.
 
-- Two players share one device
-- No user registration
-- No login system
-- No persistent user profiles
-- No online matchmaking
-- No accounts whatsoever
+### The Flow
+The application manages the game loop through explicit transition screens that act as a "curtain":
 
-**Example workflow:**
-```
-Player 1 (local) → clicks "Start Game" → places orders
-Player 2 (local) → clicks "Cambiar Jugador" → hides Player 1's orders
-Player 2 places orders → executes turn
-Loop until game ends
-```
+1.  **Player 1 Phase**:
+    -   Screen: **PLANIFICACIÓN** (Orders are secret).
+    -   Player 1 inputs orders. Player 2 must look away.
+    -   *Action*: Clicks "Terminate Turn".
 
----
+2.  **Transition Screen (The Curtain)**:
+    -   Screen: **INTERSTITIAL**.
+    -   Message: "Pass device to Player 2".
+    -   State: No game board visible. Secrets are hidden.
 
-## What This Means
+3.  **Player 2 Phase**:
+    -   Screen: **PLANIFICACIÓN** (Orders are secret).
+    -   Player 2 inputs orders. Player 1 must look away.
+    -   *Action*: Clicks "Terminate Turn".
 
-✓ **Implemented:**
-- Game save/load (local file, no user account)
+4.  **Execution Phase (Resolution)**:
+    -   Screen: **EJECUCIÓN**.
+    -   **Auth State**: Unified. Both players watch the screen.
+    -   All orders are revealed and resolved simultaneously.
+    -   *Action*: Animation completes -> Returns to Step 1 (Reset).
 
-✗ **NOT Implemented (never in MVP):**
-- User registration / signup
-- Login / password authentication
-- Online accounts
-- Persistent player profiles
-- Ranked matchmaking
-- Friend lists
-
----
-
-## Future: Network Multiplayer (Post-MVP)
-
-When SyV-Flet evolves to support **remote multiplayer** (player A vs player B over network), this skill will be updated to specify:
-
-- Authentication system (OAuth2 / JWT / custom)
-- Backend service (if applicable)
-- Session management
-- User profiles (if needed)
-
-**This skill will be completely rewritten at that point.**
-
----
-
-## For AI Assistants
-
-If you are reading this:
-
-- **Do NOT implement login/registration in MVP**
-- **Do NOT add authentication middleware**
-- **Do NOT create user database schemas**
-- **Do NOT add account management UI**
-
-The game is single-device only. Player identities are transient (Player 1 / Player 2 per session).
-
-If requirements change, this skill's header will indicate a new status. Until then: **authentication does not exist in scope.**
-
----
-
-## File Structure (Empty for MVP)
-
-```
-src/syv_flet/
-├── auth/                  ← Placeholder (unused in MVP)
-│   └── __init__.py
-```
-
-This folder exists for future expansion but contains nothing functional.
-
----
-
-## Related Documentation
-
-- [ARCHITECTURE.md](../../docs/ARCHITECTURE.md) — System design (no auth layer)
-- [PRD.md](../../docs/PRD.md) — Product spec (mentions "single device / hot seat")
-- Configuration: [configuration-management skill](../configuration-management/SKILL.md)
+This mechanism ensures the integrity of the "Simultaneous Turn" mechanic without requiring distinct user accounts.

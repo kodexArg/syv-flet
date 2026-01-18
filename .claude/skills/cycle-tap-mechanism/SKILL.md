@@ -397,72 +397,7 @@ Both players see ALL orders:
 
 ---
 
-## 9. Pseudocode Reference
-
-Here's how the tap handler routes decisions:
-
-```
-function on_tap(hex_q, hex_r):
-
-  if origin_hex is NULL:
-    if has_friendly_unit(hex_q, hex_r):
-      origin_hex = (hex_q, hex_r)
-      show_origin_highlight()
-      enable_adjacent_interactivity()
-    return
-
-  if (hex_q, hex_r) == origin_hex:
-    if adjacent_orders is not empty:
-      clear_adjacent_orders()
-      set_origin_defense()
-      show_defense_icon()
-    else if origin_is_defended():
-      cancel_all_orders()
-      origin_hex = NULL
-      clear_highlights()
-    else:
-      set_origin_defense()
-      show_defense_icon()
-    return
-
-  if is_adjacent(origin_hex, (hex_q, hex_r)):
-    current_adjacent = get_adjacent_order(hex_q, hex_r)
-
-    if current_adjacent == EMPTY:
-      create_attack_order(origin_hex, (hex_q, hex_r))
-      adjacent_orders[(hex_q, hex_r)] = ATTACK
-      show_attack_icon()
-
-    else if current_adjacent == ATTACK:
-      // Cycle to movement
-      path = [(hex_q, hex_r)]
-      adjacent_orders[(hex_q, hex_r)] = MOVEMENT_PATH
-      enable_path_extension()
-      show_path_highlight()
-
-    else if current_adjacent == MOVEMENT_PATH:
-      if can_extend_path((hex_q, hex_r)):
-        path.append((hex_q, hex_r))
-        enable_path_extension()
-        show_updated_path()
-      else:
-        // Invalid extension, fail silently
-        return
-
-    return
-
-  // All other clicks ignored
-
-function confirm_order(order_type, path):
-  if pool.available > 0:
-    pool.available -= 1
-    orders.append(Order(type=order_type, path=path, faction=current_player))
-    reset_tap_state()
-```
-
----
-
-## 10. State Diagram (Conceptual)
+## 9. State Diagram (Conceptual)
 
 ```
 ┌─────────────────────────────────────────────────────────┐
@@ -512,7 +447,7 @@ function confirm_order(order_type, path):
 
 ---
 
-## 11. Examples
+## 10. Examples
 
 ### Example 1: Simple ATTACK
 
@@ -576,7 +511,7 @@ Player A's turn:
 
 ---
 
-## Summary
+## 11. Summary
 
 The cycle-tap mechanism is a **two-tier system**:
 

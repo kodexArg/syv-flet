@@ -79,3 +79,8 @@ dmypy.json
 # Editor backup files
 *.bak
 *.tmp
+
+# Antigravity / Claude
+.claude/
+.antigravity/hooks/
+.antigravity/agents/
