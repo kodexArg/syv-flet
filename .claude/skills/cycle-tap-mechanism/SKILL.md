@@ -339,50 +339,84 @@ If available == 0:
 
 ---
 
-## 7. Hot Seat: Player Switching & Order Secrecy
+## 7. Hot Seat: Privacy Model with Phase Transition Screen
 
-### Switching Players
-
-When "Cambiar Jugador" button tapped:
+### Screen Architecture (Privacy Gate)
 
 ```
-BEFORE SWITCH:
-  Player A's orders visible (opacity 0.4) on canvas
-  Player A's order pool: visible with counter
+┌─────────────────────────────────────────────┐
+│ PHASE_TRANSITION SCREEN (Dark Overlay)      │
+│ ├─ Background: Black, 0.95 opacity         │
+│ ├─ Content: Centered Button                 │
+│ ├─ Text: "Iniciar Partida" or              │
+│ │         "Siguiente Jugador" or            │
+│ │         "Nuevo Turno"                     │
+│ └─ Purpose: Blocks ALL visibility           │
+│    (privacy gate between turns)             │
+└─────────────────────────────────────────────┘
+           ↓ [Button Click]
+┌─────────────────────────────────────────────┐
+│ GAMEPLAY SCREEN (Grid + Filtered Orders)    │
+│ ├─ PLANNING Phase (ACTIVE PLAYER):          │
+│ │  ├─ Show: Own units & orders (0.4 opacity)
+│ │  ├─ Hide: Opponent units & orders         │
+│ │  └─ Button: "Siguiente Jugador"           │
+│ ├─ EXECUTION Phase (SHARED):                │
+│ │  ├─ Show: ALL units & orders (1.0 opacity)
+│ │  ├─ Colors: Blue (P1), Red (P2)           │
+│ │  └─ Button: Hidden (auto-execute)         │
+│ └─ RESET Phase (SILENT):                    │
+│    ├─ Cleanup invisible (5-Hex Rule)        │
+│    └─ Auto-transition to PHASE_TRANSITION   │
+└─────────────────────────────────────────────┘
+```
 
-BUTTON CLICK:
-  ├─ All Player A orders erased from canvas
+### Player Switching Workflow
+
+When "Siguiente Jugador" button tapped during PLANNING:
+
+```
+BEFORE SWITCH (Player A, PLANNING):
+  ├─ GameScreen visible with grid
+  ├─ Player A's orders: visible (0.4 opacity)
+  ├─ Player B's orders: HIDDEN (0.0 opacity)
+  └─ Pool counter: shows Player A's available orders
+
+BUTTON CLICK → screen_state = PHASE_TRANSITION:
+  ├─ Dark overlay covers entire screen
   ├─ origin_hex = NULL (reset tap state)
   ├─ adjacent_orders = {} (clear path building)
-  ├─ current_player = Player B
-  └─ Canvas shows blank grid (clean slate)
+  ├─ active_player = 1 (switch to Player B)
+  ├─ phase_transition_text = "Siguiente Jugador"
+  └─ Button displayed at center
 
-AFTER SWITCH:
-  Player B sees only their order pool counter
-  Player B can place new orders
-  Player A's previous orders NOT visible to Player B (secret)
+PLAYER CLICKS BUTTON → screen_state = GAMEPLAY, PLANNING:
+  ├─ GameScreen revealed
+  ├─ Player B's orders: visible (0.4 opacity)
+  ├─ Player A's orders: HIDDEN completely
+  ├─ Pool counter: shows Player B's available orders
+  └─ UI ready for Player B to place orders
 ```
 
-### Order Visibility During PLANIFICACIÓN
+### Order Visibility Rules
 
-```
-During Player A's turn:
-  ├─ Player A sees their orders (faintly, opacity 0.4)
-  └─ Player A does NOT see Player B's previous orders
+**PLANNING Phase (PRIVATE per player):**
+- Active player: Sees only their own units and orders (0.4 opacity, faint)
+- Opponent: Orders are NOT rendered in Canvas (complete visibility filter)
+- Terrain: Always visible (grass, water, etc.)
+- Result: Each player places orders in isolation
 
-During Player B's turn:
-  ├─ Player B sees their orders (faintly, opacity 0.4)
-  └─ Player B does NOT see Player A's orders
-```
+**EXECUTION Phase (SHARED visibility):**
+- Both players see ALL units from both teams (1.0 opacity, full)
+- Color-coded: Blue (P1), Red (P2)
+- Path visualizations, attack indicators, icons all visible
+- Simultaneous resolution unfolds with both watching
 
-### Order Visibility During EJECUCIÓN
-
-```
-Both players see ALL orders:
-  ├─ Player A's orders (full opacity 1.0, team color A)
-  ├─ Player B's orders (full opacity 1.0, team color B)
-  └─ Path visualizations, attack indicators, etc.
-```
+**RESET Phase (SILENT):**
+- Cleanup happens automatically (Regla 5 Hexágonos)
+- No player input needed
+- Auto-transitions to PHASE_TRANSITION Screen
+- Button "Nuevo Turno" appears → back to PLANNING (P1)
 
 ---
 
@@ -460,7 +494,7 @@ Player A's turn:
    → ATTACK_ORDER_PLACED: ATTACK (2,3) → (3,3)
    → Pool: 4 → 3 available
 
-3. Tap "Cambiar Jugador"
+3. Tap "Siguiente Jugador"
    → All orders hidden, Player B's turn begins
 ```
 
@@ -506,7 +540,7 @@ Player A's turn:
    → CANCEL: All orders cleared, back to IDLE
    → Pool unchanged
 
-4. Tap "Cambiar Jugador" to end turn without placing orders
+4. Tap "Siguiente Jugador" to end turn without placing orders
 ```
 
 ---
@@ -521,6 +555,20 @@ The cycle-tap mechanism is a **two-tier system**:
 2. **Tier 2: Adjacent Cycling** (multi-hex, order-building)
    - Determines order type and path for ATTACK/MOVEMENT/DEPLOY
 
-All interactions are **non-destructive until confirmation**—players can change their mind at any point before the "Cambiar Jugador" button is pressed.
+All interactions are **non-destructive until confirmation**—players can change their mind at any point before the "Siguiente Jugador" button is pressed.
 
-Orders are **secret during PLANIFICACIÓN** (opacity 0.4) and **public during EJECUCIÓN** (opacity 1.0, both factions visible).
+### Privacy Integration
+
+Orders are protected by a **two-layer privacy model**:
+
+1. **Phase Transition Screen (Physical Barrier)**
+   - Dark overlay between turns (PHASE_TRANSITION screen state)
+   - Prevents visual "peeking" at the previous player's orders
+   - Required confirmation button to progress
+
+2. **Canvas Rendering Filter (Visual Hiding)**
+   - During PLANNING: Only active player's units/orders rendered (0.4 opacity)
+   - Opponent units/orders: Not rendered at all (0.0 opacity/hidden)
+   - During EXECUTION: Both players' units/orders visible (1.0 opacity, shared view)
+
+**Result:** Hotseat privacy is guaranteed—each player cannot see the opponent's orders until simultaneous EXECUTION begins.
