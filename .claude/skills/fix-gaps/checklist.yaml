@@ -1,0 +1,473 @@
+# Fix Gaps Checklist - SyV-Flet Project
+# Estado persistente para resolución recursiva de gaps técnicos
+# NO EDITAR MANUALMENTE - Gestionado por /fix-gaps skill
+
+version: "1.0"
+created_at: "2026-01-18T00:00:00Z"
+last_updated: "2026-01-18T00:00:00Z"
+
+progress:
+  total: 15
+  completed: 0
+  pending: 15
+  blocked: 3  # gaps con blocker: true
+
+gaps:
+  # ========================================
+  # PRIORIDAD CRÍTICA (🔴) - Blockers
+  # ========================================
+
+  - id: GAP-001
+    priority: critical
+    category: dependencies
+    title: "Agregar PyYAML a dependencias"
+    status: pending
+    blocker: true
+    created_at: "2026-01-18T00:00:00Z"
+    description: |
+      pyproject.toml no incluye pyyaml en dependencies, pero es requerido
+      para cargar configs.yaml. Sin esto, config_loader.py no puede funcionar.
+
+    solution_spec: |
+      1. Ejecutar: uv add pyyaml>=6.0.0
+      2. Verificar lockfile: uv lock
+      3. Validar import: python -c "import yaml; print(yaml.__version__)"
+      4. Confirmar en pyproject.toml que aparece pyyaml>=6.0.0
+
+    validation:
+      - "import yaml funciona sin ModuleNotFoundError"
+      - "uv.lock contiene pyyaml con versión correcta"
+
+    files_affected:
+      - pyproject.toml
+      - uv.lock
+
+  - id: GAP-002
+    priority: critical
+    category: skills
+    title: "Crear skill: combat-resolution"
+    status: pending
+    blocker: true
+    created_at: "2026-01-18T00:00:00Z"
+    description: |
+      No existe especificación de cómo calcular fuerza en combate.
+      PRD menciona "mayor fuerza gana, empate = estático" pero falta:
+      - Algoritmo de cálculo de fuerza
+      - Modificadores de terreno
+      - Flanking/support mechanics
+      - Resolución de empates exacta
+
+    solution_spec: |
+      1. Crear .claude/skills/combat-resolution/SKILL.md
+      2. Definir fuerza base por UnitType (Infantry, Officer, Captain)
+      3. Especificar modificadores de terreno (plains, forest, hills, etc.)
+      4. Documentar support mechanics (unidades adyacentes)
+      5. Definir tie-breaking rules
+      6. Crear tabla de ejemplos de combate
+      7. Integrar con testing-framework (casos de prueba)
+      8. Agregar allowed-tools si necesario
+
+    validation:
+      - "SKILL.md contiene algoritmo completo de fuerza"
+      - "Ejemplos de combate cubren todos los casos edge"
+      - "Integración con state-machine documentada"
+
+    files_affected:
+      - .claude/skills/combat-resolution/SKILL.md
+      - .claude/INDEX.md (agregar referencia)
+
+  - id: GAP-003
+    priority: critical
+    category: skills
+    title: "Crear skill: order-execution"
+    status: pending
+    blocker: true
+    created_at: "2026-01-18T00:00:00Z"
+    description: |
+      No hay pipeline definido para ejecutar órdenes en EXECUTION phase.
+      Preguntas sin respuesta:
+      - ¿Secuencial o paralelo?
+      - ¿Conflictos de destino? (dos unidades → mismo hex)
+      - ¿Timing de animaciones?
+      - ¿Cancelación de órdenes inválidas?
+
+    solution_spec: |
+      1. Crear .claude/skills/order-execution/SKILL.md
+      2. Definir orden de ejecución (recomendado: FIFO con priority hints)
+      3. Resolver conflictos de destino (first-come o rollback)
+      4. Especificar pipeline: Validate → Execute → Animate → Commit
+      5. Documentar cancelación automática (invalid moves post-validation)
+      6. Integrar con state-machine (EXECUTION phase triggers)
+      7. Integrar con animation-framework (timing sequences)
+      8. Crear ejemplos de conflictos y resolución
+
+    validation:
+      - "Pipeline documentado con diagrama de flujo"
+      - "Conflict resolution rules claras"
+      - "Integration points con FSM definidos"
+
+    files_affected:
+      - .claude/skills/order-execution/SKILL.md
+      - .claude/INDEX.md
+
+  # ========================================
+  # PRIORIDAD ALTA (🟡)
+  # ========================================
+
+  - id: GAP-004
+    priority: high
+    category: skills
+    title: "Crear skill: five-hex-rule"
+    status: pending
+    blocker: false
+    created_at: "2026-01-18T00:00:00Z"
+    description: |
+      Regla 5 Hexágonos mencionada en RESET phase pero algoritmo no especificado.
+      ¿Cómo detectar unidades aisladas? ¿BFS/DFS? ¿Qué distancia exactamente?
+
+    solution_spec: |
+      1. Crear .claude/skills/five-hex-rule/SKILL.md
+      2. Definir algoritmo de conectividad (BFS recomendado)
+      3. Especificar distancia exacta: 5 hexágonos Manhattan
+      4. Documentar cuándo ejecutar (RESET phase, post-execution)
+      5. Casos edge: tablero vacío, islas múltiples, unidades en bordes
+      6. Integrar con state-machine (RESET phase logic)
+      7. Crear ejemplos visuales (diagramas de conectividad)
+
+    validation:
+      - "Algoritmo BFS documentado con pseudo-código"
+      - "Casos edge cubiertos con ejemplos"
+      - "Integration con RESET phase clara"
+
+    files_affected:
+      - .claude/skills/five-hex-rule/SKILL.md
+      - .claude/INDEX.md
+
+  - id: GAP-005
+    priority: high
+    category: skills
+    title: "Crear skill: animation-framework"
+    status: pending
+    blocker: false
+    created_at: "2026-01-18T00:00:00Z"
+    description: |
+      No hay especificación de timing, easing, secuencias de animación.
+      UI necesita transiciones definidas para polish profesional.
+
+    solution_spec: |
+      1. Crear .claude/skills/animation-framework/SKILL.md
+      2. Definir duración de transiciones (recomendado: 200-500ms)
+      3. Especificar easing functions (ease-in-out para UI, linear para movement)
+      4. Documentar secuencias: PhaseTransition fade, unit movement, combat
+      5. Definir FPS target: 60 desktop, 30 mobile
+      6. Performance budget: max animation time per frame
+      7. Integrar con ux-ui-flet-rendering
+      8. Crear tabla de timing reference
+
+    validation:
+      - "Timing table completa con todos los tipos de animación"
+      - "Easing functions documentadas con curvas"
+      - "Performance budget claro"
+
+    files_affected:
+      - .claude/skills/animation-framework/SKILL.md
+      - .claude/INDEX.md
+
+  - id: GAP-006
+    priority: high
+    category: skills
+    title: "Completar skill: logging"
+    status: pending
+    blocker: false
+    created_at: "2026-01-18T00:00:00Z"
+    description: |
+      logging skill actual está al 30%. Solo dice "Loguru es el motor".
+      Falta especificación de implementación real.
+      logging_config.py existe pero no está documentado cómo integrarlo.
+
+    solution_spec: |
+      1. Editar .claude/skills/logging/SKILL.md
+      2. Definir niveles: DEBUG, INFO, WARNING, ERROR, CRITICAL
+      3. Especificar sinks: console (stderr), debug.log, error.log
+      4. Documentar rotation: diaria, max 10MB, retención 7 días
+      5. Context injection: user_id, turn_number, game_phase
+      6. Integrar logging_config.py con GameController
+      7. Crear ejemplos de uso en diferentes módulos
+      8. Performance considerations: async logging
+
+    validation:
+      - "Sección implementation completa en SKILL.md"
+      - "Ejemplos de context injection documentados"
+      - "Integration con logging_config.py explicada"
+
+    files_affected:
+      - .claude/skills/logging/SKILL.md
+
+  # ========================================
+  # PRIORIDAD MEDIA (🟢)
+  # ========================================
+
+  - id: GAP-007
+    priority: medium
+    category: skills
+    title: "Crear skill: error-handling"
+    status: pending
+    blocker: false
+    created_at: "2026-01-18T00:00:00Z"
+    description: |
+      No existe estrategia de manejo de errores.
+      ¿Qué pasa con estados inválidos, movimientos ilegales, órdenes conflictivas?
+
+    solution_spec: |
+      1. Crear .claude/skills/error-handling/SKILL.md
+      2. Definir excepciones custom:
+         - InvalidOrderError
+         - IllegalMoveError
+         - InvalidGameStateError
+      3. Especificar recovery strategies (rollback, ignore, alert)
+      4. Documentar validación en boundaries (user input, external events)
+      5. Integrar con logging (ERROR level para exceptions)
+      6. Crear error hierarchy diagram
+
+    validation:
+      - "Exception hierarchy documentada"
+      - "Recovery strategies claras"
+      - "Boundary validation especificada"
+
+    files_affected:
+      - .claude/skills/error-handling/SKILL.md
+      - .claude/INDEX.md
+
+  - id: GAP-008
+    priority: medium
+    category: architecture
+    title: "Definir config initialization"
+    status: pending
+    blocker: false
+    created_at: "2026-01-18T00:00:00Z"
+    description: |
+      Template example-config.yaml existe pero no hay spec de carga.
+      ¿Cuándo se carga? ¿Validación? ¿Path exacto de config_loader.py?
+
+    solution_spec: |
+      1. Documentar en configuration-management skill:
+         - Path exacto: src/syv_flet/engine/config_loader.py
+         - Orden de carga: env vars > configs.yaml > defaults
+         - Validación con Pydantic (Config model)
+      2. Especificar error handling:
+         - FileNotFoundError → usar defaults + warning
+         - YAMLError → crash con mensaje claro
+      3. Definir inicialización timing: antes de GameController.__init__
+      4. Crear ejemplo de Config Pydantic model
+
+    validation:
+      - "Path de config_loader.py documentado"
+      - "Orden de precedencia claro"
+      - "Error handling especificado"
+
+    files_affected:
+      - .claude/skills/configuration-management/SKILL.md
+
+  - id: GAP-009
+    priority: medium
+    category: ui
+    title: "Especificar transition timing"
+    status: pending
+    blocker: false
+    created_at: "2026-01-18T00:00:00Z"
+    description: |
+      PhaseTransitionScreen → GameScreen: ¿fade? ¿instant?
+      EXECUTION animations: ¿simultáneas? ¿secuenciales?
+
+    solution_spec: |
+      1. Documentar en ux-ui-flet-rendering skill:
+         - Fade duration: 300ms (ease-in-out)
+         - Overlay opacity: 0.95 → 0.0 gradual
+         - Button press: instant screen swap post-fade
+      2. EXECUTION sequence timing:
+         - All orders execute simultáneamente (parallel)
+         - Animations staggered: 50ms offset entre unidades
+      3. Integrar referencia a animation-framework skill
+
+    validation:
+      - "Durations específicas documentadas"
+      - "Sequence logic clara"
+
+    files_affected:
+      - .claude/skills/ux-ui-flet-rendering/SKILL.md
+
+  - id: GAP-010
+    priority: medium
+    category: ui
+    title: "Completar input feedback"
+    status: pending
+    blocker: false
+    created_at: "2026-01-18T00:00:00Z"
+    description: |
+      Tap → hex highlight definido, pero faltan:
+      - Haptic feedback (mobile)
+      - Audio cues
+      - Error states visuales
+
+    solution_spec: |
+      1. Agregar a ux-ui-flet-rendering skill:
+         - Haptic: light impact en tap válido, heavy en error
+         - Audio: opcional, off por default (config toggle)
+         - Error visual: red flash 200ms en hex inválido
+      2. Especificar intensidad haptic por plataforma
+      3. Documentar accessibility considerations
+
+    validation:
+      - "Haptic patterns documentados"
+      - "Error states visuales especificados"
+
+    files_affected:
+      - .claude/skills/ux-ui-flet-rendering/SKILL.md
+
+  - id: GAP-011
+    priority: medium
+    category: ui
+    title: "Definir loading states"
+    status: pending
+    blocker: false
+    created_at: "2026-01-18T00:00:00Z"
+    description: |
+      ¿Qué muestra durante carga de assets?
+      ¿Progress bar? ¿Splash screen?
+
+    solution_spec: |
+      1. Crear spec en ux-ui-flet-rendering:
+         - Splash screen: logo centrado + progress bar
+         - Progress: 0-100% basado en assets cargados
+         - Timeout: 10s max, error message si excede
+      2. Integrar con assets-manager (batch preload)
+      3. Definir lazy loading fallback
+
+    validation:
+      - "Splash screen layout documentado"
+      - "Progress tracking especificado"
+
+    files_affected:
+      - .claude/skills/ux-ui-flet-rendering/SKILL.md
+
+  - id: GAP-012
+    priority: medium
+    category: ui
+    title: "Completar order path visualization"
+    status: pending
+    blocker: false
+    created_at: "2026-01-18T00:00:00Z"
+    description: |
+      Waypoints (max 3) mencionados pero visualización incompleta.
+      ¿Flechas direccionales? ¿Colores por tipo de orden?
+
+    solution_spec: |
+      1. Agregar a hex-grid-flet-rendering skill:
+         - Línea: dashed para MOVEMENT, solid para ATTACK
+         - Color por OrderType: blue (MOVE), red (ATTACK), green (DEPLOY)
+         - Arrow heads en destino final
+         - Waypoints: círculos numerados (1, 2, 3)
+      2. Crear tabla de visual styles por OrderType
+
+    validation:
+      - "Style table completa"
+      - "Waypoint rendering documentado"
+
+    files_affected:
+      - .claude/skills/hex-grid-flet-rendering/SKILL.md
+
+  # ========================================
+  # PRIORIDAD BAJA (⚪) - Consistency
+  # ========================================
+
+  - id: GAP-013
+    priority: low
+    category: consistency
+    title: "Resolver nomenclatura inconsistente"
+    status: pending
+    blocker: false
+    created_at: "2026-01-18T00:00:00Z"
+    description: |
+      Mezcla de UPPERCASE (ScreenState.PHASE_TRANSITION) y PascalCase (PhaseTransitionScreen).
+      Necesita regla clara.
+
+    solution_spec: |
+      1. Documentar en code-standards skill:
+         - Enums: SCREAMING_SNAKE_CASE (ej: PHASE_TRANSITION)
+         - Classes: PascalCase (ej: PhaseTransitionScreen)
+         - Variables: snake_case
+      2. Audit todos los skills para consistencia
+      3. Crear tabla de nomenclatura reference
+
+    validation:
+      - "Regla documentada en code-standards"
+      - "Skills auditados y consistentes"
+
+    files_affected:
+      - .claude/skills/code-standards/SKILL.md
+
+  - id: GAP-014
+    priority: low
+    category: consistency
+    title: "Explicitar opacity values en hex-grid-flet-rendering"
+    status: pending
+    blocker: false
+    created_at: "2026-01-18T00:00:00Z"
+    description: |
+      "HIDDEN" mencionado sin especificar 0.0 explícitamente.
+      Debe sincronizarse con ux-ui-flet-rendering.
+
+    solution_spec: |
+      1. Agregar tabla de opacity en hex-grid-flet-rendering:
+         - PLANNING own orders: 0.4
+         - PLANNING opponent: 0.0 (HIDDEN)
+         - EXECUTION all: 1.0
+      2. Sincronizar con ux-ui-flet-rendering (ya tiene tabla)
+      3. Cross-reference entre skills
+
+    validation:
+      - "Tabla de opacity agregada"
+      - "Consistencia con ux-ui verificada"
+
+    files_affected:
+      - .claude/skills/hex-grid-flet-rendering/SKILL.md
+
+  - id: GAP-015
+    priority: low
+    category: validation
+    title: "Validar completitud de skills existentes"
+    status: pending
+    blocker: false
+    created_at: "2026-01-18T00:00:00Z"
+    description: |
+      Revisar que todos los 13 skills tengan secciones completas:
+      - Descripción, ejemplos, quick reference, allowed-tools (si aplica)
+
+    solution_spec: |
+      1. Crear audit checklist:
+         - ✅ Header con nombre, propósito
+         - ✅ Sección de ejemplos
+         - ✅ Quick reference
+         - ✅ Integration points
+         - ✅ Allowed-tools (si es auto-invocable)
+      2. Revisar cada skill contra checklist
+      3. Completar secciones faltantes
+
+    validation:
+      - "Checklist aplicada a todos los skills"
+      - "Gaps de completitud resueltos"
+
+    files_affected:
+      - .claude/skills/*/SKILL.md (múltiples)
+
+# ========================================
+# Metadata de Ejecución
+# ========================================
+
+execution_history: []
+# Ejemplo de entrada futura:
+# - gap_id: GAP-001
+#   started_at: "2026-01-18T14:30:00Z"
+#   completed_at: "2026-01-18T14:35:00Z"
+#   status: success
+#   feedback_path: ".claude/skills/fix-gaps/feedback.md#gap-001"

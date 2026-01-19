@@ -80,8 +80,5 @@ dmypy.json
 *.bak
 *.tmp
 
-# Antigravity / Claude
-.claude/
-.antigravity/hooks/
-.antigravity/agents/
+
 

@@ -1,0 +1,102 @@
+# SyV-Flet Configuration
+# ========================
+# Single source of truth for all tunable parameters.
+# ZERO magic numbers in Python source code.
+
+# Game Rules & Mechanics
+game:
+  board:
+    radius: 20                        # Board size: 3*R*(R+1) + 1 = 1,261 hexes
+
+  rules:
+    movement:
+      max_path_waypoints: 3           # Max hexes in MOVE order (excluding origin)
+      max_support_distance: 5         # "Five-Hex Rule" — max distance unit→officer
+
+    combat:
+      tie_behavior: "static"          # Combat tie: units remain static (no change)
+
+    orders:
+      max_order_history: 500          # FIFO deque limit (memory protection)
+
+# UI/UX & Layout
+ui:
+  # Responsive hex sizes (pixels, scaled by viewport)
+  hex_sizes:
+    desktop_1920: 64
+    desktop_1280: 56
+    tablet: 48
+    mobile: 40
+
+  # Faction team colors (PLANNING & EXECUTION phases)
+  faction_colors:
+    player_1: "#2196F3"               # Blue
+    player_2: "#F44336"               # Red
+    neutral: "#CCCCCC"                # Gray (hover/adjacent)
+    highlight: "#FFEB3B"              # Yellow (selection feedback)
+
+  # Order visibility by phase (opacity 0.0-1.0)
+  visibility:
+    planning_own_orders: 0.4          # Player's own orders (faint/ghost)
+    planning_opponent_orders: 0.0     # Opponent orders (hidden, not rendered)
+    execution_all_orders: 1.0         # All orders visible (full opacity, SHARED)
+
+  # Phase Transition Screen (Privacy Gate)
+  phase_transition:
+    overlay_color: "#000000"          # Black
+    overlay_opacity: 0.95             # Nearly opaque (slight transparency)
+    button_text:
+      start: "Iniciar Partida"        # Game start
+      next_player: "Siguiente Jugador" # Between PLANNING turns
+      new_round: "Nuevo Turno"         # After RESET cleanup
+
+  # Reusable Phase Button (all screens)
+  phase_button:
+    color: "#4CAF50"                  # Green accent (TBD: customize)
+    border_radius: 50                 # Fully rounded (pill/gomoso)
+    padding: 20                       # Internal spacing (px)
+    shadow_blur: 12                   # Drop shadow blur
+    shadow_spread: 2                  # Drop shadow spread
+    shadow_color: "#000000bb"         # Dark shadow
+    hover_opacity: 0.8                # On hover: fade to 80%
+    hover_scale: 1.05                 # On hover: scale to 105%
+
+# Assets & Resources
+assets:
+  hexagons:
+    path: "assets/hexagons/Previews/"
+    default_terrain: "grass.png"      # Passable
+    obstacle_terrain: "water.png"     # Impassable
+
+  icons:
+    path: "assets/icons/PNG/"
+    default_size: 64                  # pixels
+
+  fonts:
+    path: "assets/fonts/kenney_kenney-fonts/"
+    primary: "kenvector_future.ttf"   # Main UI font (TBD)
+
+# Performance & Display
+display:
+  target_fps:
+    desktop: 60                       # 60 FPS target on PC
+    mobile: 30                        # 30 FPS target on Android
+
+  canvas:
+    static_cache: true                # Cache static grid (draw once)
+    update_threshold_ms: 16           # Dynamic updates @ 16ms interval
+    culling_enabled: true             # Only render visible hexes
+
+# Logging
+logging:
+  level: "DEBUG"                      # DEBUG, INFO, WARNING, ERROR, CRITICAL
+  directory: "logs/"
+
+  files:
+    debug: "debug.log"                # All debug output
+    error: "error.log"                # Errors and above
+    daily_rotation: true              # YYYY-MM-DD.log per day
+    max_days_retention: 30            # Delete logs older than 30 days
+
+  format: "%(asctime)s | %(levelname)-8s | %(message)s"
+  colors: true                        # Colored output to STDERR

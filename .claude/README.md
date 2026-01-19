@@ -29,38 +29,44 @@ This directory contains comprehensive documentation and automatic Claude Code sk
 
 Skills are automatically invoked by Claude when relevant. Use them with `/skill-name` or trigger them with context keywords.
 
-### Available Skills
+### Core Skills (Updated for Hot-Seat Privacy)
 
-| Skill | Trigger Keywords | Purpose |
-|-------|-----------------|---------|
-| **code-standards-review** | review, SOLID, refactor, implement | Review code against mandatory standards |
-| **hex-grid-math** | pathfinding, hex grid, coordinates, distance | Hex coordinate operations and algorithms |
-| **hexagonal-grid-ui-ux** | UI, UX, minimalismo, design, buttons, layout | Build UI with minimalist design + Kenney assets |
-| **hex-grid-rendering** | rendering, canvas, pixel-perfect, transform | Mathematical precision for grid rendering |
-| **testing-framework** | test, pytest, coverage, unit test | Write and run tests with pytest |
-| **dev-environment** | setup, environment, dependencies, troubleshoot | Configure development environment |
-| **board-implementation** | board logic, tile system, grid operations | Implement board systems with architecture |
+| Skill | Purpose | Key Topics |
+|-------|---------|-----------|
+| **state-machine** | Game FSM with `ScreenState` (privacy gate) | GamePhase + ScreenState, hotseat privacy model |
+| **hex-grid-math** | Hexagonal coordinate operations | Pathfinding, distance, adjacency, flat-top orientation |
+| **hex-grid-flet-rendering** | Canvas rendering with privacy filtering | Player-filtered unit/order visibility, PLANNING vs EXECUTION |
+| **ux-ui-flet-rendering** | Radical minimalism + PhaseTransitionScreen | Two-screen model, reusable PhaseButton, responsive design |
+| **cycle-tap-mechanism** | Order validation and tap cycling | Hidden vs visible orders, state transitions |
+| **code-standards** | SOLID principles, clean architecture | Type hints, zero magic numbers, hexagonal pattern |
+| **testing-framework** | BDD testing with pytest | Fixtures, coverage, hotseat privacy tests |
+| **configuration-management** | `configs.yaml` centralization | Overlay opacity, button colors, hex sizes |
+| **dev-environment** | Setup and `uv` workflow | Dependencies, environment configuration |
+| **assets-manager** | Kenney asset strategy | Hexagon tiles, board icons, fonts, caching |
+| **git-workflow** | Conventional commits | Commit standards, branching strategy |
+| **logging** | Loguru centralization | Debug/error logs, rotation policy |
+| **fix-gaps** | Recursive gap resolution | Checklist management, feedback tracking, systematic fixes |
+| **user-authentication** | MVP status: NOT IMPLEMENTED | Hot-seat only, no auth needed for v1 |
 
-### Invoking Skills Manually
+### Using Skills
+
+Skills are triggered automatically when relevant, but can also be invoked manually:
 
 ```bash
-# List available skills
-What Skills are available?
+# Manual invocation examples:
+/state-machine        # FSM design with privacy gates
+/hex-grid-flet-rendering  # Canvas privacy filtering
+/ux-ui-flet-rendering     # Two-screen model & PhaseButton
+/testing-framework    # BDD tests for hotseat privacy
+/code-standards       # Code review against SOLID
+```
 
-# Use skill directly
-/code-standards-review
-/hex-grid-math
-/hexagonal-grid-ui-ux
-/hex-grid-rendering
-/testing-framework
-/dev-environment
-/board-implementation
-
-# Or trigger via context
-"review this code against SyV-Flet standards"
-"implement minimalist UI with Kenney assets"
-"render hex grid with pixel-perfect precision"
-"write tests for the board"
+Or trigger via context:
+```
+"design the privacy model for hotseat mode"
+"implement the Phase Transition Screen"
+"write tests for player switching"
+"render the hex grid with privacy filtering"
 ```
 
 ## Automatic Hooks
@@ -126,6 +132,6 @@ All skills are cross-referenced:
 
 ---
 
-**Language:** 100% English  
-**Last Updated:** January 16, 2026  
+**Language:** 100% English
+**Last Updated:** January 18, 2026
 **Project Name:** SyV-Flet (Subordinación y Valor - Flet Framework)
